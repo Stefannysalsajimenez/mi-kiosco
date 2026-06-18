@@ -1,250 +1,174 @@
 // ===== js/invoice.js =====
-// Funcionalidad 11: Generar boleta/factura PDF profesional por pedido
+// Módulo unificado: Invoice (boleta PDF) + ExcelExport
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  INVOICE — Boleta PDF
+// ══════════════════════════════════════════════════════════════════════════════
 const Invoice = (() => {
-
   function generate(order) {
     const date = order.createdAt?.toDate
-      ? order.createdAt.toDate().toLocaleString('es-PE', {
-          weekday: 'long', year: 'numeric', month: 'long',
-          day: 'numeric', hour: '2-digit', minute: '2-digit'
-        })
-      : new Date().toLocaleString('es-PE');
-
-    const itemRows = (order.items || []).map(item => `
+      ? order.createdAt.toDate().toLocaleString('es-PE') : new Date().toLocaleString('es-PE');
+    const storeName = (typeof APP_CONFIG !== 'undefined' ? APP_CONFIG.storeName : null) || 'Kiosco';
+    const rows = (order.items || []).map(i => `
       <tr>
-        <td>${item.name}</td>
-        <td style="text-align:center">${item.qty}</td>
-        <td style="text-align:right">${APP_CONFIG.currency} ${Number(item.price).toFixed(2)}</td>
-        <td style="text-align:right">${APP_CONFIG.currency} ${Number(item.price * item.qty).toFixed(2)}</td>
-      </tr>
-    `).join('');
-
-    const storeName = document.querySelector('.logo-text')?.textContent || APP_CONFIG.storeName;
-    const accentColor = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#f97316';
+        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${i.name}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:center">${i.qty}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right">S/ ${Number(i.price).toFixed(2)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right">S/ ${Number(i.subtotal || i.price * i.qty).toFixed(2)}</td>
+      </tr>`).join('');
 
     const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Boleta #${order.id?.slice(-6).toUpperCase() || 'KIOSCO'}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      color: #1a1a1a;
-      background: #fff;
-      padding: 40px;
-      max-width: 680px;
-      margin: 0 auto;
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 32px;
-      padding-bottom: 24px;
-      border-bottom: 3px solid ${accentColor};
-    }
-    .store-name {
-      font-size: 28px;
-      font-weight: 900;
-      color: ${accentColor};
-      letter-spacing: -.02em;
-    }
-    .store-sub { font-size: 13px; color: #888; margin-top: 4px; }
-    .invoice-meta { text-align: right; }
-    .invoice-num { font-size: 18px; font-weight: 700; color: #333; }
-    .invoice-date { font-size: 12px; color: #888; margin-top: 4px; }
-
-    .customer-section {
-      background: #f8f8f8;
-      border-radius: 10px;
-      padding: 16px 20px;
-      margin-bottom: 24px;
-    }
-    .customer-label { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: .08em; }
-    .customer-name { font-size: 18px; font-weight: 700; margin-top: 4px; }
-    ${order.delivery?.address ? `
-    .customer-address { font-size: 13px; color: #666; margin-top: 6px; }
-    ` : ''}
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 16px;
-    }
-    thead tr {
-      background: ${accentColor};
-      color: #fff;
-    }
-    th {
-      padding: 10px 12px;
-      text-align: left;
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-    }
-    td {
-      padding: 10px 12px;
-      font-size: 14px;
-      border-bottom: 1px solid #eee;
-    }
-    tbody tr:hover { background: #fafafa; }
-
-    .totals {
-      margin-left: auto;
-      width: 260px;
-    }
-    .total-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 6px 0;
-      font-size: 14px;
-      color: #555;
-    }
-    .total-row.grand {
-      border-top: 2px solid ${accentColor};
-      margin-top: 8px;
-      padding-top: 10px;
-      font-size: 20px;
-      font-weight: 900;
-      color: ${accentColor};
-    }
-
-    ${order.delivery?.address ? `
-    .delivery-section {
-      background: #f0f9ff;
-      border: 1px solid #bae6fd;
-      border-radius: 10px;
-      padding: 14px 18px;
-      margin-top: 16px;
-      font-size: 13px;
-      color: #0369a1;
-    }
-    .delivery-section strong { display: block; margin-bottom: 4px; }
-    ` : ''}
-
-    ${order.estimatedMinutes ? `
-    .eta-badge {
-      display: inline-block;
-      background: ${accentColor}20;
-      color: ${accentColor};
-      border-radius: 99px;
-      padding: 4px 12px;
-      font-size: 13px;
-      font-weight: 700;
-      margin-top: 12px;
-    }
-    ` : ''}
-
-    .footer {
-      margin-top: 32px;
-      padding-top: 16px;
-      border-top: 1px solid #eee;
-      text-align: center;
-      font-size: 12px;
-      color: #aaa;
-    }
-    .status-chip {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 99px;
-      font-size: 12px;
-      font-weight: 700;
-      margin-top: 8px;
-    }
-    .status-done     { background: #dcfce7; color: #16a34a; }
-    .status-pending  { background: #fef9c3; color: #ca8a04; }
-    .status-rejected { background: #fee2e2; color: #dc2626; }
-
-    @media print {
-      body { padding: 20px; }
-      .no-print { display: none !important; }
-    }
-  </style>
+<html lang="es"><head>
+<meta charset="UTF-8"/>
+<title>Boleta #${(order.id || '').slice(-6).toUpperCase()} · ${storeName}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;color:#222;max-width:580px;margin:32px auto;padding:24px}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #f97316}
+  .store-name{font-size:1.6rem;font-weight:900;color:#f97316}
+  .doc-title{font-size:.95rem;font-weight:700;color:#555;text-align:right}
+  .doc-number{font-size:1.1rem;font-weight:900;text-align:right}
+  .client-box{background:#f9f9f9;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:.88rem}
+  .client-box h3{font-size:.75rem;text-transform:uppercase;color:#888;margin-bottom:6px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th{background:#f97316;color:#fff;padding:8px;font-size:.8rem;text-align:left}
+  th:nth-child(n+2){text-align:center}
+  th:last-child{text-align:right}
+  .total-section{border-top:2px solid #f97316;padding-top:12px;text-align:right}
+  .total-row{display:flex;justify-content:flex-end;gap:32px;margin-bottom:4px;font-size:.88rem}
+  .total-final{font-size:1.2rem;font-weight:900;color:#f97316}
+  .footer{margin-top:32px;text-align:center;color:#aaa;font-size:.75rem}
+  @media print{body{margin:0}}
+</style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="store-name">🛍️ ${storeName}</div>
-      <div class="store-sub">Tu tienda digital de confianza</div>
-    </div>
-    <div class="invoice-meta">
-      <div class="invoice-num">BOLETA #${(order.id || '').slice(-6).toUpperCase()}</div>
-      <div class="invoice-date">${date}</div>
-      <span class="status-chip status-${order.status || 'pending'}">
-        ${{ pending:'⏳ Pendiente', done:'✅ Completado', rejected:'❌ Rechazado' }[order.status] || order.status}
-      </span>
-    </div>
+<div class="header">
+  <div>
+    <div class="store-name">🛍️ ${storeName}</div>
+    <div style="font-size:.8rem;color:#888;margin-top:4px">${date}</div>
   </div>
-
-  <div class="customer-section">
-    <div class="customer-label">Cliente</div>
-    <div class="customer-name">👤 ${order.customer || 'Cliente'}</div>
-    ${order.delivery?.address ? `<div class="customer-address">📍 ${order.delivery.address}${order.delivery.reference ? ` — ${order.delivery.reference}` : ''}</div>` : ''}
+  <div>
+    <div class="doc-title">BOLETA DE VENTA</div>
+    <div class="doc-number">#${(order.id || '').slice(-6).toUpperCase() || 'N/A'}</div>
   </div>
+</div>
+<div class="client-box">
+  <h3>Cliente</h3>
+  <p><strong>${order.customer || 'Cliente'}</strong></p>
+  ${order.customerPhone ? `<p>Tel: ${order.customerPhone}</p>` : ''}
+  ${order.deliveryAddress ? `<p>Dirección: ${order.deliveryAddress}</p>` : ''}
+  ${order.scheduledDate ? `<p>Fecha pedido: ${order.scheduledDate}${order.scheduledTime ? ' ' + order.scheduledTime : ''}</p>` : ''}
+</div>
+<table>
+  <thead><tr>
+    <th>Producto</th>
+    <th style="text-align:center">Cant.</th>
+    <th style="text-align:right">Precio</th>
+    <th style="text-align:right">Subtotal</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="total-section">
+  <div class="total-row"><span>Subtotal</span><span>S/ ${(order.total || 0).toFixed(2)}</span></div>
+  <div class="total-row total-final"><span>TOTAL</span><span>S/ ${(order.total || 0).toFixed(2)}</span></div>
+</div>
+<div class="footer">
+  <p>¡Gracias por tu compra en ${storeName}! 🎉</p>
+  <p style="margin-top:4px">Generado el ${new Date().toLocaleString('es-PE')}</p>
+</div>
+<script>window.onload=()=>window.print()<\/script>
+</body></html>`;
 
-  <table>
-    <thead>
-      <tr>
-        <th>Producto</th>
-        <th style="text-align:center">Cant.</th>
-        <th style="text-align:right">Precio</th>
-        <th style="text-align:right">Subtotal</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${itemRows}
-    </tbody>
-  </table>
-
-  <div class="totals">
-    <div class="total-row">
-      <span>Subtotal</span>
-      <span>${APP_CONFIG.currency} ${(order.total || 0).toFixed(2)}</span>
-    </div>
-    <div class="total-row grand">
-      <span>TOTAL</span>
-      <span>${APP_CONFIG.currency} ${(order.total || 0).toFixed(2)}</span>
-    </div>
-  </div>
-
-  ${order.delivery?.address ? `
-  <div class="delivery-section">
-    <strong>📦 Información de entrega</strong>
-    Dirección: ${order.delivery.address}
-    ${order.delivery.reference ? `<br>Referencia: ${order.delivery.reference}` : ''}
-  </div>` : ''}
-
-  ${order.estimatedMinutes ? `<div class="eta-badge">⏱️ Entrega estimada: ${order.estimatedMinutes} min</div>` : ''}
-
-  <div class="footer">
-    Gracias por tu compra en ${storeName} 🙏<br>
-    Generado el ${new Date().toLocaleString('es-PE')}
-  </div>
-
-  <script>
-    window.onload = () => {
-      window.print();
-    };
-  <\/script>
-</body>
-</html>`;
-
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const blob = new Blob([html], { type: 'text/html' });
     const url  = URL.createObjectURL(blob);
     const win  = window.open(url, '_blank');
     if (!win) {
-      // Fallback: download
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `boleta-${(order.id || 'kiosco').slice(-6)}.html`;
+      a.href = url; a.download = `boleta-${(order.id || Date.now().toString()).slice(-6)}.html`;
       a.click();
     }
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
   return { generate };
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  EXCEL EXPORT
+// ══════════════════════════════════════════════════════════════════════════════
+const ExcelExport = (() => {
+  async function exportXLSX(period) {
+    // Load SheetJS dynamically
+    if (!window.XLSX) {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+
+    showToast('Generando Excel…', 'info');
+
+    const snap = await db.collection(COLL.orders).orderBy('createdAt', 'desc').get();
+    const all  = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const now   = new Date();
+    const start = new Date();
+    if (period === 'day')   { start.setHours(0,0,0,0); }
+    else if (period === 'week')  { start.setDate(now.getDate() - now.getDay()); start.setHours(0,0,0,0); }
+    else if (period === 'month') { start.setDate(1); start.setHours(0,0,0,0); }
+
+    const orders = all.filter(o => {
+      if (!o.createdAt) return false;
+      const t = o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+      return t >= start;
+    });
+
+    const labels   = { day: 'Hoy', week: 'Esta semana', month: 'Este mes' };
+    const statusLb = { pending: 'Pendiente', done: 'Completado', rejected: 'Rechazado' };
+
+    // Sheet 1: Orders
+    const ordersData = [
+      ['ID', 'Cliente', 'Teléfono', 'Dirección', 'Tipo entrega', 'Fecha programada', 'Productos', 'Total', 'Estado', 'Fecha pedido']
+    ];
+    orders.forEach(o => {
+      const items = (o.items || []).map(i => `${i.name} x${i.qty}`).join(' | ');
+      const date  = o.createdAt?.toDate ? o.createdAt.toDate().toLocaleString('es-PE') : '';
+      ordersData.push([
+        (o.id || '').slice(-8),
+        o.customer || '', o.customerPhone || '',
+        o.deliveryAddress || '',
+        o.deliveryType === 'delivery' ? 'Delivery' : 'Recojo en tienda',
+        o.scheduledDate ? `${o.scheduledDate} ${o.scheduledTime || ''}` : '',
+        items, o.total || 0,
+        statusLb[o.status] || o.status, date
+      ]);
+    });
+
+    // Sheet 2: Summary
+    const revenue = orders.filter(o => o.status !== 'rejected').reduce((s, o) => s + (o.total || 0), 0);
+    const summaryData = [
+      ['Métrica', 'Valor'],
+      ['Período', labels[period] || period],
+      ['Total pedidos', orders.length],
+      ['Completados',   orders.filter(o => o.status === 'done').length],
+      ['Pendientes',    orders.filter(o => o.status === 'pending').length],
+      ['Rechazados',    orders.filter(o => o.status === 'rejected').length],
+      ['Ingresos totales', revenue],
+      ['Ticket promedio', orders.length ? +(revenue / orders.length).toFixed(2) : 0]
+    ];
+
+    const wb  = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(ordersData);
+    const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws1['!cols'] = [10,15,14,22,16,18,40,10,12,20].map(w => ({ wch: w }));
+    ws2['!cols'] = [22,18].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws1, 'Pedidos');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Resumen');
+    XLSX.writeFile(wb, `kiosco-${period}-${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('Excel descargado 📊', 'success');
+  }
+
+  return { exportXLSX };
 })();

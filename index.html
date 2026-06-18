@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <meta name="theme-color" content="#f97316" />
   <meta name="description" content="Kiosco — Tu tienda digital en tiempo real" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kiosco</title>
@@ -23,7 +24,6 @@
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/animations.css" />
   <link rel="stylesheet" href="css/extras.css" />
-  <link rel="stylesheet" href="css/features.css" />
   <link rel="stylesheet" href="css/admin-sections.css" />
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -33,64 +33,67 @@
 
 <body class="theme-dark">
 
-  <!-- ║         HEADER               ║ -->
-
+  <!-- ══════════════════════════════════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════════════════════════════════════ -->
   <header class="site-header" id="siteHeader">
     <div class="header-inner">
-      <div class="logo-wrap" role="banner">
+      <div class="logo-wrap">
         <span class="logo-icon">🛍️</span>
         <span class="logo-text">Kiosco</span>
       </div>
-
-      <nav class="header-nav" aria-label="Navegación principal">
-        <!-- populated by JS when admin -->
-      </nav>
-
       <div class="header-actions">
-        <!-- Theme toggle -->
-        <button class="btn-icon theme-toggle" id="themeToggle" aria-label="Cambiar tema claro/oscuro"
-          title="Cambiar tema">
+        <button class="btn-icon theme-toggle" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
           <span class="theme-icon">☀️</span>
         </button>
-        <!-- Cart (mobile only) -->
-        <button class="btn-icon cart-btn mobile-only" id="cartBtnMobile" aria-label="Ver carrito de compras">
+        <!-- Carrito solo en móvil -->
+        <button class="btn-icon cart-btn mobile-only" id="cartBtnMobile" aria-label="Ver carrito">
           🛒 <span class="cart-badge" id="cartBadge">0</span>
         </button>
-        <!-- Admin login -->
-        <button class="btn-icon" id="loginBtn" aria-label="Acceso administrador"
-          title="Acceso administrador">👤</button>
+        <!-- Perfil/Login -->
+        <button class="btn-icon" id="profileBtn" aria-label="Mi perfil" title="Mi perfil">👤</button>
+        <!-- Admin (oculto hasta login) -->
+        <button class="btn-icon" id="loginBtn" aria-label="Acceso" title="Acceso" style="display:none">👥</button>
       </div>
     </div>
   </header>
 
-  <!-- ║       PAGE: TIENDA           ║ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TIENDA (público)
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <main id="pageStore" class="page active">
+    <!-- Banner cerrado -->
+    <div id="storeClosedBanner" style="display:none" class="store-closed-banner"></div>
+    <!-- Banner ETA -->
+    <div id="etaBanner"
+      style="display:none;padding:.5rem 1.25rem;text-align:center;background:var(--bg-2);border-bottom:1px solid var(--border)">
+    </div>
 
-  <main id="pageStore" class="page active" aria-label="Tienda">
     <div class="store-layout">
-
-      <!-- Sidebar de categorías -->
-      <aside class="category-sidebar" aria-label="Categorías">
+      <!-- Categorías -->
+      <aside class="category-sidebar">
         <p class="sidebar-title">Categorías</p>
-        <ul class="category-list" id="categoryList">
-          <!-- rendered by store.js -->
-        </ul>
+        <ul class="category-list" id="categoryList"></ul>
       </aside>
 
       <!-- Productos -->
-      <section class="products-section" aria-label="Productos">
+      <section class="products-section">
+        <!-- Destacados -->
+        <div id="featuredSection" style="display:none">
+          <p class="featured-title">⭐ Destacados</p>
+          <div class="featured-grid" id="featuredGrid"></div>
+          <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0" />
+        </div>
         <div class="products-header">
           <h1 class="section-title" id="currentCategoryTitle">Todos los productos</h1>
-          <div class="search-bar" role="search">
-            <span class="search-icon" aria-hidden="true">🔍</span>
-            <input type="search" id="searchInput" placeholder="Buscar productos…" aria-label="Buscar productos" />
+          <div class="search-bar">
+            <span class="search-icon">🔍</span>
+            <input type="search" id="searchInput" placeholder="Buscar productos…" aria-label="Buscar" />
           </div>
         </div>
-        <div class="products-grid" id="productsGrid" role="list">
-          <!-- Skeleton loading -->
+        <div class="products-grid" id="productsGrid">
           <div id="productsLoading" class="loading-pulse"
             style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1rem">
-            <div class="pulse-card"></div>
-            <div class="pulse-card"></div>
             <div class="pulse-card"></div>
             <div class="pulse-card"></div>
             <div class="pulse-card"></div>
@@ -99,13 +102,13 @@
         </div>
       </section>
 
-      <!-- Carrito (solo desktop) -->
-      <aside class="cart-sidebar desktop-only" aria-label="Carrito de compras">
+      <!-- Carrito desktop -->
+      <aside class="cart-sidebar desktop-only">
         <div class="cart-header">
           <h2>🛒 Mi Pedido</h2>
-          <button class="btn-clear" id="clearCartBtn" aria-label="Limpiar carrito">Limpiar</button>
+          <button class="btn-clear" id="clearCartBtn">Limpiar</button>
         </div>
-        <div class="cart-items" id="cartItems" role="list">
+        <div class="cart-items" id="cartItems">
           <p class="cart-empty">Tu carrito está vacío</p>
         </div>
         <div class="cart-footer" id="cartFooter" style="display:none">
@@ -113,31 +116,25 @@
             <span>Total:</span>
             <strong id="cartTotal">S/ 0.00</strong>
           </div>
-          <input type="text" id="customerName" placeholder="Tu nombre (opcional)" class="input-field"
-            autocomplete="name" />
-          <button class="btn-primary btn-block" id="sendOrderBtn">
-            Enviar Pedido
-          </button>
-          <button class="btn-outline btn-block" id="shareWhatsappBtn">
-            Compartir por WhatsApp
-          </button>
+          <button class="btn-primary btn-block" id="sendOrderBtn"> Enviar Pedido</button>
+          <button class="btn-outline btn-block" id="shareWhatsappBtn">💬 WhatsApp</button>
         </div>
       </aside>
-
-    </div><!-- /store-layout -->
+    </div>
   </main>
 
-  <!-- ║      PAGE: ADMINISTRADOR     ║ -->
-
-  <main id="pageAdmin" class="page" aria-label="Panel de administración">
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ADMIN
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <main id="pageAdmin" class="page">
     <div class="admin-layout">
 
-      <!-- Sidebar de navegación admin -->
-      <nav class="admin-sidebar" aria-label="Menú admin">
+      <!-- Sidebar admin -->
+      <nav class="admin-sidebar">
         <ul>
           <li>
             <button class="admin-nav-btn" id="backToStoreBtn"
-              style="color:var(--info);margin-bottom:.5rem;border-bottom:1px solid var(--border);width:100%;text-align:left;padding-bottom:.75rem">
+              style="color:var(--info);border-bottom:1px solid var(--border);width:100%;text-align:left;margin-bottom:.5rem;padding-bottom:.75rem">
               ← Volver a la tienda
             </button>
           </li>
@@ -158,184 +155,145 @@
       <!-- Contenido admin -->
       <div class="admin-content" id="adminContent">
 
-        <!-- ── DASHBOARD ── -->
+        <!-- DASHBOARD -->
         <section class="admin-section active" id="sectionDashboard">
           <div class="section-header">
-            <h2> Dashboard</h2>
-            <div class="period-tabs" role="tablist" aria-label="Período">
-              <button class="period-tab active" data-period="day" role="tab">Hoy</button>
-              <button class="period-tab" data-period="week" role="tab">Semana</button>
-              <button class="period-tab" data-period="month" role="tab">Mes</button>
-            </div>
-          </div>
-
-          <div class="stats-grid" id="statsGrid">
-            <div class="stat-card"><span class="stat-icon">💰</span>
-              <div class="stat-info"><span class="stat-value" id="statRevenue">S/ 0.00</span>
-                <span class="stat-label">Ingresos</span>
-              </div>
-            </div>
-            <div class="stat-card"><span class="stat-icon">📦</span>
-              <div class="stat-info"><span class="stat-value" id="statOrders">0</span>
-                <span class="stat-label">Pedidos</span>
-              </div>
-            </div>
-            <div class="stat-card"><span class="stat-icon">✅</span>
-              <div class="stat-info"><span class="stat-value" id="statDone">0</span>
-                <span class="stat-label">Completados</span>
-              </div>
-            </div>
-            <div class="stat-card"><span class="stat-icon">⏳</span>
-              <div class="stat-info"><span class="stat-value" id="statPending">0</span>
-                <span class="stat-label">Pendientes</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="chart-area">
-            <canvas id="salesChart" aria-label="Gráfico de ventas"></canvas>
-          </div>
-
-          <div class="download-bar">
-            <span> Descargar reporte:</span>
-            <button class="btn-outline btn-sm" id="downloadDay">Hoy</button>
-            <button class="btn-outline btn-sm" id="downloadWeek">Semana</button>
-            <button class="btn-outline btn-sm" id="downloadMonth">Mes</button>
-          </div>
-        </section>
-
-        <!-- ── PEDIDOS ── -->
-        <section class="admin-section" id="sectionOrders">
-          <div class="section-header">
-            <h2> Pedidos en tiempo real</h2>
-            <div class="order-filters" role="group" aria-label="Filtrar por estado">
-              <button class="filter-btn active" data-filter="all">Todos</button>
-              <button class="filter-btn" data-filter="pending">⏳ Pendiente</button>
-              <button class="filter-btn" data-filter="done">✅ Hecho</button>
-              <button class="filter-btn" data-filter="rejected">❌ Rechazado</button>
-            </div>
-          </div>
-          <div class="orders-list" id="ordersList" role="list">
-            <div class="empty-state">
-              <div class="empty-icon">📋</div>
-              <p>Cargando pedidos…</p>
-            </div>
-          </div>
-        </section>
-
-        <!-- ── PRODUCTOS ── -->
-        <section class="admin-section" id="sectionProducts">
-          <div class="section-header">
-            <h2> Productos</h2>
-            <button class="btn-primary" id="addProductBtn" aria-label="Agregar producto">+ Nuevo Producto</button>
-          </div>
-          <div class="admin-products-grid" id="adminProductsGrid">
-            <div class="empty-state">
-              <div class="empty-icon">📦</div>
-              <p>Cargando productos…</p>
-            </div>
-          </div>
-        </section>
-
-        <!-- ── CATEGORÍAS ── -->
-        <section class="admin-section" id="sectionCategories">
-          <div class="section-header">
-            <h2> Categorías</h2>
-            <button class="btn-primary" id="addCategoryBtn">+ Nueva Categoría</button>
-            <button class="btn-outline" id="addSubcategoryBtn">+ Nueva Subcategoría</button>
-          </div>
-          <div class="categories-manager" id="categoriesManager">
-            <div class="empty-state">
-              <div class="empty-icon">📂</div>
-              <p>Cargando categorías…</p>
-            </div>
-          </div>
-        </section>
-
-        <!-- GASTOS -->
-        <section class="admin-section owner-only" id="sectionExpenses">
-          <div class="section-header">
-            <h2> Registro de Gastos</h2>
+            <h2>📊 Dashboard</h2>
             <div class="period-tabs">
               <button class="period-tab active" data-period="day">Hoy</button>
               <button class="period-tab" data-period="week">Semana</button>
               <button class="period-tab" data-period="month">Mes</button>
             </div>
           </div>
-          <div class="modal-form" style="max-width:400px;margin-bottom:1.5rem">
-            <div class="form-row-2" style="display:grid;grid-template-columns:1fr auto;gap:.75rem">
-              <input type="text" id="expenseDesc" class="input-field" placeholder="Descripción del gasto" />
-              <input type="number" id="expenseAmount" class="input-field" placeholder="S/ 0.00" step="0.50"
-                style="width:110px" />
+          <div class="stats-grid" id="statsGrid">
+            <div class="stat-card animate-in">
+              <span class="stat-icon">💰</span>
+              <div class="stat-info"><span class="stat-value" id="statRevenue">S/ 0.00</span><span
+                  class="stat-label">Ingresos</span></div>
             </div>
-            <button class="btn-primary" id="addExpenseBtn">+ Agregar gasto</button>
+            <div class="stat-card animate-in" style="animation-delay:.08s">
+              <span class="stat-icon">📦</span>
+              <div class="stat-info"><span class="stat-value" id="statOrders">0</span><span
+                  class="stat-label">Pedidos</span></div>
+            </div>
+            <div class="stat-card animate-in" style="animation-delay:.16s">
+              <span class="stat-icon">✅</span>
+              <div class="stat-info"><span class="stat-value" id="statDone">0</span><span
+                  class="stat-label">Completados</span></div>
+            </div>
+            <div class="stat-card animate-in" style="animation-delay:.24s">
+              <span class="stat-icon">⏳</span>
+              <div class="stat-info"><span class="stat-value" id="statPending">0</span><span
+                  class="stat-label">Pendientes</span></div>
+            </div>
           </div>
-          <div class="expense-list" id="expenseList"></div>
-          <div class="expense-total" id="expenseTotal" style="display:none">
-            <span>Total gastos:</span><span id="expenseTotalAmount">S/ 0.00</span>
-          </div>
-          <div style="margin-top:1rem;display:flex;gap:.75rem;flex-wrap:wrap">
-            <button class="btn-outline" id="exportExpensesCSV">📥 CSV</button>
-            <button class="btn-outline" id="exportExpensesXLSX">📊 Excel</button>
+          <div class="chart-area"><canvas id="salesChart"></canvas></div>
+          <div class="download-bar" style="margin-top:1rem">
+            <span>Descargar reporte:</span>
+            <button class="btn-outline btn-sm" id="downloadDay">Hoy</button>
+            <button class="btn-outline btn-sm" id="downloadWeek">Semana</button>
+            <button class="btn-outline btn-sm" id="downloadMonth">Mes</button>
+            <span style="margin-left:.5rem">Excel:</span>
+            <button class="btn-excel" id="xlsxDay">Hoy</button>
+            <button class="btn-excel" id="xlsxWeek">Semana</button>
+            <button class="btn-excel" id="xlsxMonth">Mes</button>
           </div>
         </section>
 
-        <!-- CAJA -->
-        <section class="admin-section owner-only" id="sectionCashregister">
+        <!-- PEDIDOS -->
+        <section class="admin-section" id="sectionOrders">
           <div class="section-header">
-            <h2> Caja Diaria</h2>
+            <h2>📋 Pedidos en tiempo real</h2>
+            <div class="order-filters">
+              <button class="filter-btn active" data-filter="all">Todos</button>
+              <button class="filter-btn" data-filter="pending">⏳ Pendiente</button>
+              <button class="filter-btn" data-filter="done">✅ Hecho</button>
+              <button class="filter-btn" data-filter="rejected">❌ Rechazado</button>
+            </div>
+          </div>
+          <div class="orders-list" id="ordersList"></div>
+        </section>
+
+        <!-- PRODUCTOS -->
+        <section class="admin-section" id="sectionProducts">
+          <div class="section-header">
+            <h2>🏷️ Productos</h2>
+            <button class="btn-primary" id="addProductBtn">+ Nuevo Producto</button>
+          </div>
+          <div class="admin-products-grid" id="adminProductsGrid"></div>
+        </section>
+
+        <!-- CATEGORÍAS -->
+        <section class="admin-section" id="sectionCategories">
+          <div class="section-header">
+            <h2>📂 Categorías</h2>
+            <div style="display:flex;gap:.5rem">
+              <button class="btn-primary" id="addCategoryBtn">+ Categoría</button>
+              <button class="btn-outline" id="addSubcategoryBtn">+ Subcategoría</button>
+            </div>
+          </div>
+          <div class="categories-manager" id="categoriesManager"></div>
+        </section>
+
+        <!-- CAJA -->
+        <section class="admin-section" id="sectionCashregister">
+          <div class="section-header">
+            <h2>🏦 Caja Diaria</h2>
           </div>
           <div id="cashRegisterContainer"></div>
         </section>
 
         <!-- HORARIO -->
-        <section class="admin-section owner-only" id="sectionSchedule">
+        <section class="admin-section" id="sectionSchedule">
           <div class="section-header">
-            <h2> Horario de Atención</h2>
+            <h2>🕐 Horario de Atención</h2>
           </div>
-          <div class="schedule-grid" id="scheduleGrid"></div>
-          <button class="btn-primary" id="saveScheduleBtn" style="margin-top:1rem">Guardar Horario</button>
+          <div id="scheduleGrid"></div>
+          <button class="btn-primary" id="saveScheduleBtn" style="margin-top:1rem;display:none">💾 Guardar
+            Horario</button>
         </section>
 
-        <!-- PERSONAL / ROLES -->
-        <section class="admin-section owner-only" id="sectionStaff">
+        <!-- PERSONAL -->
+        <section class="admin-section" id="sectionStaff">
           <div class="section-header">
-            <h2> Personal</h2>
+            <h2>👥 Personal</h2>
             <button class="btn-primary" id="addStaffBtn">+ Agregar empleado</button>
           </div>
-          <p style="color:var(--text-2);font-size:.88rem;margin-bottom:1rem">
-            Los empleados pueden ver y gestionar pedidos, pero no pueden editar productos, categorías ni configuración.
+          <p style="color:var(--text-2);font-size:.85rem;margin-bottom:1rem">
+            Los empleados pueden gestionar pedidos pero no editar productos ni configuración.
           </p>
           <div id="staffList"></div>
         </section>
 
         <!-- APARIENCIA -->
-        <section class="admin-section owner-only" id="sectionBranding">
+        <section class="admin-section" id="sectionBranding">
           <div class="section-header">
-            <h2> Apariencia de la Tienda</h2>
+            <h2>🎨 Apariencia de la Tienda</h2>
           </div>
-          <div class="modal-form" style="max-width:440px">
+          <div class="modal-form" style="max-width:480px">
             <div class="form-row">
               <label>Nombre de la tienda</label>
               <input type="text" id="brandStoreName" class="input-field" placeholder="Mi Kiosco" />
             </div>
             <div class="form-row">
-              <label>Emoji / Ícono</label>
+              <label>Emoji / Ícono del logo</label>
               <input type="text" id="brandLogoEmoji" class="input-field" placeholder="🛍️" maxlength="4" />
             </div>
             <div class="form-row">
               <label>Color principal</label>
-              <div class="color-preview" id="colorPreview">Vista previa</div>
-              <div class="color-grid">
+              <div id="colorPreview"
+                style="width:100%;height:44px;border-radius:var(--radius-sm);background:var(--accent);margin-bottom:.5rem;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:.9rem">
+                Vista previa</div>
+              <div class="color-grid" style="margin-bottom:.75rem">
                 <div class="color-swatch selected" style="background:#f97316" data-color="#f97316" title="Naranja">
                 </div>
                 <div class="color-swatch" style="background:#ef4444" data-color="#ef4444" title="Rojo"></div>
-                <div class="color-swatch" style="background:#8b5cf6" data-color="#8b5cf6" title="Morado"></div>
+                <div class="color-swatch" style="background:#a855f7" data-color="#a855f7" title="Morado"></div>
                 <div class="color-swatch" style="background:#06b6d4" data-color="#06b6d4" title="Cyan"></div>
                 <div class="color-swatch" style="background:#22c55e" data-color="#22c55e" title="Verde"></div>
                 <div class="color-swatch" style="background:#ec4899" data-color="#ec4899" title="Rosa"></div>
                 <div class="color-swatch" style="background:#f59e0b" data-color="#f59e0b" title="Amarillo"></div>
-                <div class="color-swatch" style="background:#0ea5e9" data-color="#0ea5e9" title="Azul"></div>
+                <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6" title="Azul"></div>
               </div>
               <input type="color" id="brandColor" class="input-field" value="#f97316" style="height:44px" />
             </div>
@@ -343,7 +301,15 @@
               <label>⏱️ Tiempo estimado de entrega (minutos)</label>
               <input type="number" id="brandDeliveryTime" class="input-field" placeholder="30" min="0" />
             </div>
-            <button class="btn-primary" id="saveBrandingBtn">Guardar Apariencia</button>
+            <div class="form-row">
+              <label>💜 Número Yape</label>
+              <input type="tel" id="brandYapeNumber" class="input-field" placeholder="+51 9XX XXX XXX" />
+            </div>
+            <div class="form-row">
+              <label>💚 Número Plin</label>
+              <input type="tel" id="brandPlinNumber" class="input-field" placeholder="+51 9XX XXX XXX" />
+            </div>
+            <button class="btn-primary btn-block" id="saveBrandingBtn">💾 Guardar Apariencia</button>
           </div>
         </section>
 
@@ -351,21 +317,25 @@
     </div><!-- /admin-layout -->
   </main>
 
-  <!-- Login -->
-  <div class="modal-overlay" id="loginModal" role="dialog" aria-modal="true">
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MODALES
+  ══════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- LOGIN / PERFIL -->
+  <div class="modal-overlay" id="loginModal">
     <div class="modal-box">
-      <button class="modal-close" id="closeLoginModal" aria-label="Cerrar">✕</button>
-      <h2 class="modal-title">🛍️ Bienvenido</h2>
+      <button class="modal-close" id="closeLoginModal">✕</button>
+      <h2 class="modal-title">🛍️ Bienvenido a Kiosco</h2>
 
       <!-- Tabs -->
-      <div class="profile-tabs">
-        <button class="profile-tab active" id="loginTabUser">👤 Soy cliente</button>
-        <button class="profile-tab" id="loginTabAdmin">👥 Administrador</button>
+      <div class="login-tabs">
+        <button class="login-tab active" id="loginTabUser">👤 Soy cliente</button>
+        <button class="login-tab" id="loginTabAdmin">👥 Administrador</button>
       </div>
 
       <!-- Panel Usuario -->
       <div id="loginPanelUser">
-        <p class="modal-subtitle">Ingresa tu nombre para hacer pedidos</p>
+        <p class="modal-subtitle">Ingresa tu nombre para hacer pedidos y ver tu historial</p>
         <div class="modal-form">
           <div class="form-row">
             <label>Tu nombre *</label>
@@ -373,7 +343,7 @@
               autocomplete="name" />
           </div>
           <div class="form-row">
-            <label>Teléfono (opcional)</label>
+            <label>Teléfono</label>
             <div class="phone-input-wrap">
               <span class="phone-prefix">🇵🇪 +51</span>
               <input type="tel" id="userPhoneInput" placeholder="9XX XXX XXX" maxlength="9" inputmode="numeric" />
@@ -385,7 +355,7 @@
 
       <!-- Panel Admin -->
       <div id="loginPanelAdmin" style="display:none">
-        <p class="modal-subtitle">Solo para administradores</p>
+        <p class="modal-subtitle">Acceso exclusivo para administradores</p>
         <div id="loginStep1">
           <div class="phone-input-wrap">
             <span class="phone-prefix">🇵🇪 +51</span>
@@ -403,43 +373,82 @@
         </div>
       </div>
 
-      <p class="login-error" id="loginError" role="alert"></p>
+      <p class="login-error" id="loginError"></p>
     </div>
   </div>
 
-  <!-- Producto -->
-  <div class="modal-overlay" id="productModal" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+  <!-- PERFIL DE USUARIO (historial) -->
+  <div class="modal-overlay" id="profileModal">
+    <div class="modal-box" style="max-width:500px">
+      <button class="modal-close" id="closeProfileModal">✕</button>
+      <h2 class="modal-title">👤 Mi Perfil</h2>
+      <div class="login-tabs" style="margin-bottom:1rem">
+        <button class="login-tab active" data-profile-tab="info">Mis datos</button>
+        <button class="login-tab" data-profile-tab="history">📋 Mis pedidos</button>
+      </div>
+      <!-- Info tab -->
+      <div id="profileTabInfo">
+        <div class="modal-form">
+          <div class="form-row">
+            <label>Nombre</label>
+            <input type="text" id="profileNameInput" class="input-field" placeholder="Tu nombre" />
+          </div>
+          <div class="form-row">
+            <label>Teléfono</label>
+            <div class="phone-input-wrap">
+              <span class="phone-prefix">🇵🇪 +51</span>
+              <input type="tel" id="profilePhoneInput" placeholder="9XX XXX XXX" maxlength="9" inputmode="numeric" />
+            </div>
+          </div>
+          <div style="display:flex;gap:.5rem">
+            <button class="btn-primary" id="saveProfileBtn" style="flex:1">💾 Guardar</button>
+            <button class="btn-danger btn-sm" id="logoutUserBtn">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+      <!-- History tab -->
+      <div id="profileTabHistory" style="display:none">
+        <div id="profileOrderHistory">
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <p>Cargando pedidos…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRODUCTO -->
+  <div class="modal-overlay" id="productModal">
     <div class="modal-box modal-wide">
-      <button class="modal-close" id="closeProductModal" aria-label="Cerrar">✕</button>
+      <button class="modal-close" id="closeProductModal">✕</button>
       <h2 class="modal-title" id="productModalTitle">Nuevo Producto</h2>
       <form id="productForm" class="modal-form" novalidate>
         <input type="hidden" id="productId" />
         <div class="form-row-2">
           <div class="form-row">
-            <label for="productName">Nombre *</label>
-            <input type="text" id="productName" class="input-field" required placeholder="Nombre del producto"
-              autocomplete="off" />
+            <label>Nombre *</label>
+            <input type="text" id="productName" class="input-field" required placeholder="Nombre del producto" />
           </div>
           <div class="form-row">
-            <label for="productPrice">Precio (S/) *</label>
+            <label>Precio (S/) *</label>
             <input type="number" id="productPrice" class="input-field" step="0.10" min="0" required
               placeholder="0.00" />
           </div>
         </div>
         <div class="form-row">
-          <label for="productDesc">Descripción</label>
-          <textarea id="productDesc" class="input-field" rows="2"
-            placeholder="Descripción breve del producto"></textarea>
+          <label>Descripción</label>
+          <textarea id="productDesc" class="input-field" rows="2" placeholder="Descripción breve"></textarea>
         </div>
         <div class="form-row-2">
           <div class="form-row">
-            <label for="productCategory">Categoría</label>
+            <label>Categoría</label>
             <select id="productCategory" class="input-field">
               <option value="">Sin categoría</option>
             </select>
           </div>
           <div class="form-row">
-            <label for="productSubcategory">Subcategoría</label>
+            <label>Subcategoría</label>
             <select id="productSubcategory" class="input-field">
               <option value="">Sin subcategoría</option>
             </select>
@@ -447,19 +456,19 @@
         </div>
         <div class="form-row-2">
           <div class="form-row">
-            <label for="productStock">Stock (dejar vacío = ilimitado)</label>
-            <input type="number" id="productStock" class="input-field" min="0" placeholder="∞ Ilimitado" />
+            <label>Stock (vacío = ilimitado)</label>
+            <input type="number" id="productStock" class="input-field" min="0" placeholder="∞" />
           </div>
           <div class="form-row">
-            <label for="productEmoji">Emoji (si no hay imagen)</label>
+            <label>Emoji (sin imagen)</label>
             <input type="text" id="productEmoji" class="input-field" placeholder="🍕" maxlength="4" />
           </div>
         </div>
         <div class="form-row">
-          <label for="productImage">URL de imagen</label>
-          <input type="url" id="productImage" class="input-field" placeholder="https://ejemplo.com/imagen.jpg"
-            autocomplete="off" />
-          <img id="productImagePreview" class="img-preview" alt="Vista previa" />
+          <label>URL de imagen</label>
+          <input type="url" id="productImage" class="input-field" placeholder="https://…" />
+          <img id="productImagePreview" class="img-preview" alt="Vista previa"
+            style="display:none;width:100%;max-height:150px;object-fit:cover;border-radius:var(--radius-sm);margin-top:.5rem" />
         </div>
         <div class="form-row">
           <label class="toggle-label">
@@ -467,50 +476,55 @@
             <span>Producto activo (visible en tienda)</span>
           </label>
         </div>
+        <div class="form-row">
+          <label class="toggle-label">
+            <input type="checkbox" id="productFeatured" />
+            <span>⭐ Producto destacado</span>
+          </label>
+        </div>
         <div class="form-actions">
           <button type="button" class="btn-outline" id="cancelProductBtn">Cancelar</button>
-          <button type="submit" class="btn-primary"> Guardar Producto</button>
+          <button type="submit" class="btn-primary">💾 Guardar Producto</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Categoría -->
-  <div class="modal-overlay" id="categoryModal" role="dialog" aria-modal="true" aria-labelledby="categoryModalTitle">
+  <!-- CATEGORÍA -->
+  <div class="modal-overlay" id="categoryModal">
     <div class="modal-box">
-      <button class="modal-close" id="closeCategoryModal" aria-label="Cerrar">✕</button>
+      <button class="modal-close" id="closeCategoryModal">✕</button>
       <h2 class="modal-title" id="categoryModalTitle">Nueva Categoría</h2>
       <form id="categoryForm" class="modal-form" novalidate>
         <input type="hidden" id="categoryId" />
         <div class="form-row">
-          <label for="categoryName">Nombre *</label>
-          <input type="text" id="categoryName" class="input-field" required placeholder="Nombre de la categoría"
-            autocomplete="off" />
+          <label>Nombre *</label>
+          <input type="text" id="categoryName" class="input-field" required placeholder="Nombre" />
         </div>
         <div class="form-row">
-          <label for="categoryEmoji">Emoji / Ícono</label>
-          <input type="text" id="categoryEmoji" class="input-field" placeholder="🍕" maxlength="4" />
+          <label>Emoji</label>
+          <input type="text" id="categoryEmoji" class="input-field" placeholder="📦" maxlength="4" />
         </div>
         <div class="form-row">
-          <label for="categoryParent">Categoría padre (para subcategoría)</label>
+          <label>Categoría padre (para subcategoría)</label>
           <select id="categoryParent" class="input-field">
             <option value="">— Es categoría principal —</option>
           </select>
         </div>
         <div class="form-actions">
           <button type="button" class="btn-outline" id="cancelCategoryBtn">Cancelar</button>
-          <button type="submit" class="btn-primary"> Guardar</button>
+          <button type="submit" class="btn-primary">💾 Guardar</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Carrito móvil -->
-  <div class="modal-overlay" id="cartModal" role="dialog" aria-modal="true" aria-label="Carrito de compras">
+  <!-- CARRITO MÓVIL -->
+  <div class="modal-overlay" id="cartModal">
     <div class="modal-box modal-cart">
-      <button class="modal-close" id="closeCartModal" aria-label="Cerrar carrito">✕</button>
+      <button class="modal-close" id="closeCartModal">✕</button>
       <h2 class="modal-title">🛒 Mi Pedido</h2>
-      <div class="cart-items" id="cartItemsMobile" role="list">
+      <div class="cart-items" id="cartItemsMobile">
         <p class="cart-empty">Tu carrito está vacío</p>
       </div>
       <div class="cart-footer" id="cartFooterMobile" style="display:none">
@@ -518,98 +532,64 @@
           <span>Total:</span>
           <strong id="cartTotalMobile">S/ 0.00</strong>
         </div>
-        <input type="text" id="customerNameMobile" placeholder="Tu nombre (opcional)" class="input-field"
-          autocomplete="name" />
-        <button class="btn-primary btn-block" id="sendOrderBtnMobile">
-          Enviar Pedido
-        </button>
-        <button class="btn-outline btn-block" id="shareWhatsappBtnMobile">
-          Compartir por WhatsApp
-        </button>
+        <button class="btn-primary btn-block" id="sendOrderBtnMobile"> Enviar Pedido</button>
+        <button class="btn-outline btn-block" id="shareWhatsappBtnMobile">💬 WhatsApp</button>
       </div>
     </div>
   </div>
 
-  <!-- Toast container -->
-  <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="false"></div>
-
-  <!-- ── Delivery time banner ──────────────────────────────────────────────── -->
-  <div class="delivery-time-banner" id="deliveryTimeBanner" style="display:none"></div>
-
-  <!-- ── Closed banner ─────────────────────────────────────────────────────── -->
-  <div class="closed-banner" id="closedBanner" style="display:none">
-    🔒 La tienda está cerrada en este momento. Vuelve pronto.
-  </div>
-
-  <!-- ── Featured section (injected before store) ─────────────────────────── -->
-
-  <!-- Modal: Historial de pedidos -->
-  <div class="modal-overlay" id="historyModal">
-    <div class="modal-box modal-wide">
-      <button class="modal-close" id="closeHistoryModal">✕</button>
-      <h2 class="modal-title">📋 Mis pedidos anteriores</h2>
-      <div id="historyList"></div>
-    </div>
-  </div>
-
-  <!-- Modal: Chat -->
-  <div class="modal-overlay" id="chatModal">
-    <div class="modal-box">
-      <button class="modal-close" onclick="Chat.close()">✕</button>
-      <h2 class="modal-title" id="chatOrderTitle">💬 Chat</h2>
-      <div class="chat-messages" id="chatMessages"></div>
-      <div class="chat-input-row">
-        <input type="text" id="chatInput" class="input-field" placeholder="Escribe un mensaje..." />
-        <button class="btn-primary" id="chatSendBtn">Enviar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: Staff (agregar empleado) -->
+  <!-- EMPLEADO -->
   <div class="modal-overlay" id="staffModal">
     <div class="modal-box">
       <button class="modal-close" id="closeStaffModal">✕</button>
-      <h2 class="modal-title">Agregar Empleado</h2>
+      <h2 class="modal-title">➕ Agregar Empleado</h2>
       <div class="modal-form">
         <div class="form-row">
-          <label>Número de teléfono (+51)</label>
+          <label>Nombre completo</label>
+          <input type="text" id="staffName" class="input-field" placeholder="Ej: María García" />
+        </div>
+        <div class="form-row">
+          <label>Teléfono *</label>
           <div class="phone-input-wrap">
             <span class="phone-prefix">🇵🇪 +51</span>
-            <input type="tel" id="staffPhone" class="input-field" placeholder="9XX XXX XXX" maxlength="9" />
+            <input type="tel" id="staffPhone" placeholder="9XX XXX XXX" maxlength="9" inputmode="numeric" />
           </div>
         </div>
         <div class="form-row">
-          <label>Nombre (opcional)</label>
-          <input type="text" id="staffName" class="input-field" placeholder="Nombre del empleado" />
+          <label>Rol</label>
+          <select id="staffRole" class="input-field">
+            <option value="employee">🧑‍💼 Empleado</option>
+            <option value="admin"> Admin</option>
+          </select>
         </div>
         <div class="form-actions">
           <button class="btn-outline" id="cancelStaffBtn">Cancelar</button>
-          <button class="btn-primary" id="saveStaffBtn">Guardar</button>
+          <button class="btn-primary" id="saveStaffBtn">💾 Guardar</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ── Scripts ─────────────────────────────────────────────────────────────── -->
-  <script src="js/config.js"></script>
-  <script src="js/firebase.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/store.js"></script>
-  <script src="js/cart.js"></script>
-  <script src="js/admin.js"></script>
-  <script src="js/dashboard.js"></script>
-  <script src="js/orders.js"></script>
-  <script src="js/notifications.js"></script>
-  <script src="js/share.js"></script>
-  <script src="js/ui-helpers.js"></script>
-  <script src="js/features.js"></script>
-  <script src="js/invoice.js"></script>
-  <script src="js/app.js"></script>
-  <script src="js/featured.js"></script>
-  <script src="js/profile.js"></script>
-  <script src="js/chat.js"></script>
-  <script src="js/settings.js"></script>
-  <script src="js/extras.js"></script>
+  <!-- TOASTS -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCRIPTS — orden correcto, sin duplicados
+  ══════════════════════════════════════════════════════════════════════════ -->
+
+<script src="js/config.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/store.js"></script>
+<script src="js/cart.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/orders.js"></script>
+<script src="js/notifications.js"></script>
+<script src="js/share.js"></script>
+<script src="js/ui-helpers.js"></script>
+<script src="js/app.js"></script>
+
   <script>
     if ('serviceWorker' in navigator)
       navigator.serviceWorker.register('sw.js').catch(() => { });
