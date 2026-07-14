@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = 'v1.9';
+const APP_VERSION = 'v2.0';
 const CACHE_PREFIX = 'kiosco';
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${APP_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-${APP_VERSION}`;
@@ -30,7 +30,9 @@ const NETWORK_ONLY_HOSTS = [
   'firestore.googleapis.com',
   'identitytoolkit.googleapis.com',
   'securetoken.googleapis.com',
-  'firebaseinstallations.googleapis.com'
+  'firebaseinstallations.googleapis.com',
+  'firebasestorage.googleapis.com',
+  'storage.googleapis.com'
 ];
 
 const STATIC_CDN_HOSTS = [

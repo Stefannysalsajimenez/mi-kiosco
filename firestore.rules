@@ -1,12 +1,60 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /config/{d}    { allow read: if true; allow write: if request.auth != null; }
-    match /products/{id} { allow read: if true; allow write: if request.auth != null; }
-    match /categories/{id}{ allow read: if true; allow write: if request.auth != null; }
-    match /orders/{id}   { allow create: if true; allow read: if true; allow update,delete: if request.auth != null; }
-    match /chats/{id}           { allow read,write: if true; }
-    match /chats/{id}/messages/{m}{ allow read,write: if true; }
-    match /audit_log/{id}       { allow read,write: if request.auth != null; }
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isStockOnlyDecrease() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt'])
+        && resource.data.stock is int
+        && request.resource.data.stock is int
+        && request.resource.data.stock >= 0
+        && request.resource.data.stock < resource.data.stock;
+    }
+
+    function isValidOrder() {
+      return request.resource.data.customer is string
+        && request.resource.data.customer.size() > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.status == 'pending';
+    }
+
+    match /config/{documentId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, delete: if isAuthenticated();
+      allow update: if isAuthenticated() || isStockOnlyDecrease();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /orders/{orderId} {
+      allow create: if isValidOrder();
+      allow read: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    match /chats/{chatId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /audit_log/{documentId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }

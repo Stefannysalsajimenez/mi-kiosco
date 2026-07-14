@@ -1028,111 +1028,9 @@ function closeResponsivePanels() {
 }
 
 function renderMobileCart() {
-  if (typeof Cart === 'undefined') return;
-
-  const items = Cart.getItems() || [];
-  const list = AppDom.byId('cartItemsListMobile');
-  const empty = AppDom.byId('cartEmptyMobile');
-  const footer = AppDom.byId('cartFooterMobile');
-  const count = Number(Cart.count() || 0);
-  const total = Number(Cart.total() || 0);
-
-  document.querySelectorAll('.cart-count').forEach(element => {
-    element.textContent = String(count);
-    element.style.display = count > 0 ? 'inline-flex' : 'none';
-  });
-
-  if (list) {
-    list.innerHTML = items.map(item => {
-      const id = esc(item.id);
-      const name = esc(item.name);
-      const imageUrl = item.imageUrl ? esc(item.imageUrl) : '';
-      const quantity = Number(item.qty || 0);
-      const price = Number(item.price || 0);
-      const subtotal = price * quantity;
-      const image = imageUrl
-        ? `<img class="cart-item-img" src="${imageUrl}" alt="${name}" width="56" height="56" loading="lazy">`
-        : '<div class="cart-item-img-ph d-grid place-items-center" style="width:56px;height:56px"><i class="bi bi-bag"></i></div>';
-
-      return `<article class="cart-item d-flex gap-2 py-2 border-bottom" data-cart-id="${id}">
-        ${image}
-        <div class="flex-grow-1 min-w-0">
-          <div class="fw-semibold small text-truncate">${name}</div>
-          <div class="text-muted small">${esc(getCurrency())} ${price.toFixed(2)} c/u</div>
-          <div class="small fw-semibold text-primary">Subtotal: ${esc(getCurrency())} ${subtotal.toFixed(2)}</div>
-          <div class="d-flex align-items-center gap-1 mt-2">
-            <button type="button" class="btn btn-outline-secondary btn-xs" data-cart-action="decrease" aria-label="Disminuir cantidad"><i class="bi bi-dash"></i></button>
-            <span class="px-2 fw-bold">${quantity}</span>
-            <button type="button" class="btn btn-outline-secondary btn-xs" data-cart-action="increase" aria-label="Aumentar cantidad"><i class="bi bi-plus"></i></button>
-            <button type="button" class="btn btn-outline-danger btn-xs ms-auto" data-cart-action="remove" aria-label="Eliminar producto"><i class="bi bi-trash"></i></button>
-          </div>
-        </div>
-      </article>`;
-    }).join('');
+  if (typeof Cart !== 'undefined' && typeof Cart.render === 'function') {
+    Cart.render();
   }
-
-  if (empty) empty.style.display = items.length ? 'none' : 'block';
-  if (footer) footer.hidden = !items.length;
-
-  const formatted = `${getCurrency()} ${total.toFixed(2)}`;
-  if (AppDom.byId('cartSubtotalMobile')) AppDom.byId('cartSubtotalMobile').textContent = formatted;
-  if (AppDom.byId('cartTotalMobile')) AppDom.byId('cartTotalMobile').textContent = formatted;
-
-  enhanceDesktopCart(items);
-}
-
-function enhanceDesktopCart(items) {
-  const rows = document.querySelectorAll('#cartItemsList .cart-item');
-  rows.forEach((row, index) => {
-    const item = items[index];
-    if (!item) return;
-
-    let subtotal = row.querySelector('.cart-item-subtotal');
-    if (!subtotal) {
-      subtotal = document.createElement('div');
-      subtotal.className = 'cart-item-subtotal small fw-semibold text-primary';
-      row.querySelector('.flex-grow-1')?.append(subtotal);
-    }
-
-    subtotal.textContent = `Subtotal: ${getCurrency()} ${(Number(item.price || 0) * Number(item.qty || 0)).toFixed(2)}`;
-  });
-}
-
-function wrapCartMethods() {
-  if (typeof Cart === 'undefined' || Cart.__appWrapped) return;
-
-  ['add', 'remove', 'removeAll', 'clear'].forEach(methodName => {
-    const original = Cart[methodName];
-    if (typeof original !== 'function') return;
-
-    Cart[methodName] = function wrappedCartMethod(...args) {
-      const result = original.apply(Cart, args);
-      queueMicrotask(renderMobileCart);
-      return result;
-    };
-  });
-
-  if (typeof Cart.checkout === 'function') {
-    const originalCheckout = Cart.checkout;
-    Cart.checkout = async function wrappedCheckout(...args) {
-      try {
-        return await originalCheckout.apply(Cart, args);
-      } finally {
-        renderMobileCart();
-      }
-    };
-  }
-
-  const originalRender = Cart.render;
-  if (typeof originalRender === 'function') {
-    Cart.render = function wrappedRender(...args) {
-      const result = originalRender.apply(Cart, args);
-      queueMicrotask(renderMobileCart);
-      return result;
-    };
-  }
-
-  Cart.__appWrapped = true;
 }
 
 function shareCart() {
@@ -1186,11 +1084,6 @@ function initResponsiveUi() {
     AppDom.offcanvas('adminOffcanvas')?.show();
   });
 
-  AppDom.bind(AppDom.byId('clearCartBtnMobile'), 'click', () => {
-    if (typeof Cart === 'undefined' || !Cart.count()) return;
-    if (window.confirm('¿Vaciar carrito?')) Cart.clear();
-  });
-
   ['shareWhatsappBtn', 'shareWhatsappBtnMobile'].forEach(id => {
     AppDom.bind(AppDom.byId(id), 'click', shareCart);
   });
@@ -1212,22 +1105,6 @@ function initResponsiveUi() {
         .find(link => link.dataset.adminSection === section);
       desktopLink?.click();
       AppDom.offcanvas('adminOffcanvas')?.hide();
-      return;
-    }
-
-    const cartAction = event.target.closest('#cartItemsListMobile [data-cart-action]');
-    if (cartAction && typeof Cart !== 'undefined') {
-      const itemElement = cartAction.closest('[data-cart-id]');
-      const id = itemElement?.dataset.cartId;
-      if (!id) return;
-
-      const action = cartAction.dataset.cartAction;
-      if (action === 'decrease') Cart.remove(id);
-      if (action === 'remove') Cart.removeAll(id);
-      if (action === 'increase') {
-        const item = Cart.getItems().find(product => product.id === id);
-        if (item) Cart.add(item);
-      }
       return;
     }
 
@@ -1276,7 +1153,6 @@ async function bootstrapApplication() {
   initOrderModal();
   initAdminNavigation();
   initResponsiveUi();
-  wrapCartMethods();
 
   if (typeof Auth !== 'undefined') {
     Auth.loadAdminPhones().catch(error => {
