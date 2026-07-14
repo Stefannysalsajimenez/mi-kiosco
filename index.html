@@ -5,30 +5,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <meta name="theme-color" content="#f97316" />
+  <meta name="color-scheme" content="light dark" />
   <meta name="description" content="Kiosco — Tu tienda digital en tiempo real" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Kiosco</title>
+  <script>
+    (() => {
+      const savedTheme = localStorage.getItem('kk_theme');
+      const preferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-bs-theme', savedTheme || preferredTheme);
+    })();
+  </script>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icons/favicon.png" type="image/png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
 
-  <!-- Bootstrap 4.6 (reemplazamos por Bootstrap 5.3 que incluye modo oscuro) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
-  <!-- Bootstrap Icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
-  <!-- App CSS -->
   <link rel="stylesheet" href="css/app.css" />
 </head>
 
 <body>
-
-  <!-- ══════════════════════════════════════════════
-     PÁGINA: TIENDA
-══════════════════════════════════════════════ -->
   <div id="page-store" class="page-view">
-
-    <!-- Header -->
     <header class="site-header">
       <div class="header-inner">
         <a href="#" class="logo-wrap">
@@ -38,37 +37,31 @@
           <span class="logo-text">Kiosco</span>
         </a>
         <div class="header-actions">
-          <button class="btn-icon" id="themeToggleBtn" title="Cambiar tema">
+          <button type="button" class="btn-icon" id="themeToggleBtn" title="Cambiar tema" aria-label="Cambiar tema">
             <i class="bi bi-sun-fill" id="themeIcon"></i>
           </button>
-          <button class="btn-icon d-lg-none" id="sidebarToggleBtn" title="Categorías">
+          <button type="button" class="btn-icon d-lg-none" id="sidebarToggleBtn" title="Categorías" aria-label="Abrir categorías">
             <i class="bi bi-list"></i>
           </button>
-          <button class="btn-icon cart-badge-wrap d-lg-none" id="cartMobileBtn" title="Carrito">
+          <button type="button" class="btn-icon cart-badge-wrap d-lg-none" id="cartMobileBtn" title="Carrito" aria-label="Abrir carrito">
             <i class="bi bi-cart3"></i>
             <span class="cart-count" style="display:none">0</span>
           </button>
-          <button class="btn-icon" id="profileBtn" title="Perfil / Acceso">
+          <button type="button" class="btn-icon" id="profileBtn" title="Perfil / Acceso" aria-label="Perfil o acceso">
             <i class="bi bi-person-circle"></i>
           </button>
-          <button class="btn btn-sm d-none d-md-inline-flex align-items-center gap-1" id="installPwaBtn"
+          <button type="button" class="btn btn-sm d-none align-items-center gap-1" id="installPwaBtn" aria-label="Instalar aplicación"
             style="background:rgba(var(--accent-rgb),.15);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:.8rem;padding:.35rem .75rem">
             <i class="bi bi-download"></i> Instalar
           </button>
         </div>
       </div>
     </header>
-
-    <!-- Store layout -->
     <div class="store-layout flex-grow-1">
-
-      <!-- Sidebar categorías (desktop) -->
       <aside class="store-sidebar" id="storeSidebar">
         <div class="sidebar-label">Categorías</div>
         <ul class="nav flex-column" id="categoryList"></ul>
       </aside>
-
-      <!-- Products main -->
       <main class="products-main">
         <div class="products-header">
           <h2 id="currentCatTitle">Todos los productos</h2>
@@ -84,8 +77,6 @@
           </div>
         </div>
       </main>
-
-      <!-- Cart sidebar (desktop) -->
       <aside class="cart-sidebar d-none d-lg-flex flex-column">
         <div class="cart-header">
           <h5><i class="bi bi-cart3 me-2"></i>Mi Pedido</h5>
@@ -113,13 +104,7 @@
       </aside>
     </div>
   </div>
-
-  <!-- ══════════════════════════════════════════════
-     PÁGINA: ADMIN
-══════════════════════════════════════════════ -->
   <div id="page-admin" class="page-view">
-
-    <!-- Admin header -->
     <header class="site-header">
       <div class="header-inner">
         <a href="#" class="logo-wrap">
@@ -131,8 +116,11 @@
             style="background:rgba(var(--accent-rgb),.15);color:var(--accent);font-size:.65rem">Admin</span>
         </a>
         <div class="header-actions">
-          <button class="btn-icon" id="themeToggleBtn2" title="Cambiar tema">
+          <button type="button" class="btn-icon" id="themeToggleBtn2" title="Cambiar tema" aria-label="Cambiar tema">
             <i class="bi bi-sun-fill"></i>
+          </button>
+          <button type="button" class="btn-icon d-lg-none" id="adminMenuBtn" title="Menú administrativo" aria-label="Abrir menú administrativo">
+            <i class="bi bi-list"></i>
           </button>
           <button class="btn btn-outline-secondary btn-sm" id="backToStoreBtn">
             <i class="bi bi-shop me-1"></i>Tienda
@@ -145,8 +133,6 @@
     </header>
 
     <div class="admin-layout flex-grow-1">
-
-      <!-- Admin sidebar -->
       <nav class="admin-sidebar d-none d-lg-flex flex-column">
         <div class="sidebar-section-label">Principal</div>
         <a class="nav-link active" data-admin-section="dashboard" href="#">
@@ -181,12 +167,8 @@
           </button>
         </div>
       </nav>
-
-      <!-- Admin content -->
       <main class="admin-main">
         <div class="admin-content">
-
-          <!-- ── DASHBOARD ── -->
           <div class="admin-section active" id="sec-dashboard">
             <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
               <h2 class="section-title mb-0"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h2>
@@ -196,8 +178,6 @@
                 <button class="btn btn-outline-secondary btn-sm" data-dash-period="month">Mes</button>
               </div>
             </div>
-
-            <!-- Stat cards -->
             <div class="row g-3 mb-4">
               <div class="col-6 col-lg-3">
                 <div class="stat-card card">
@@ -238,8 +218,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- Charts -->
             <div class="row g-3 mb-4">
               <div class="col-lg-7">
                 <div class="card chart-card">
@@ -254,8 +232,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- Low stock + Excel -->
             <div class="row g-3">
               <div class="col-lg-5">
                 <div class="card">
@@ -282,8 +258,6 @@
               </div>
             </div>
           </div>
-
-          <!-- ── PEDIDOS ── -->
           <div class="admin-section" id="sec-orders">
             <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
               <h2 class="section-title mb-0"><i class="bi bi-receipt me-2"></i>Pedidos</h2>
@@ -296,8 +270,6 @@
             </div>
             <div class="row g-3" id="ordersContainer"></div>
           </div>
-
-          <!-- ── PRODUCTOS ── -->
           <div class="admin-section" id="sec-products">
             <div class="d-flex align-items-center justify-content-between mb-4">
               <h2 class="section-title mb-0"><i class="bi bi-box-seam me-2"></i>Productos</h2>
@@ -307,8 +279,6 @@
             </div>
             <div class="row g-3" id="adminProductsGrid"></div>
           </div>
-
-          <!-- ── CATEGORÍAS ── -->
           <div class="admin-section" id="sec-categories">
             <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
               <h2 class="section-title mb-0"><i class="bi bi-tags me-2"></i>Categorías</h2>
@@ -335,22 +305,16 @@
               </div>
             </div>
           </div>
-
-          <!-- ── CAJA ── -->
           <div class="admin-section" id="sec-caja">
             <h2 class="section-title"><i class="bi bi-cash-coin me-2"></i>Caja Diaria</h2>
             <div id="cajaContent"></div>
           </div>
-
-          <!-- ── HORARIO ── -->
           <div class="admin-section" id="sec-horario">
             <h2 class="section-title"><i class="bi bi-clock me-2"></i>Horario de Atención</h2>
             <div class="card">
               <div class="card-body" id="scheduleContent"></div>
             </div>
           </div>
-
-          <!-- ── PERSONAL ── -->
           <div class="admin-section" id="sec-personal">
             <div class="d-flex align-items-center justify-content-between mb-4">
               <h2 class="section-title mb-0"><i class="bi bi-people me-2"></i>Personal</h2>
@@ -373,8 +337,6 @@
               </div>
             </div>
           </div>
-
-          <!-- ── APARIENCIA ── -->
           <div class="admin-section" id="sec-apariencia">
             <h2 class="section-title"><i class="bi bi-palette me-2"></i>Apariencia</h2>
             <div class="card">
@@ -416,11 +378,6 @@
       </main>
     </div>
   </div>
-
-  <!-- ══════════════════════════════════
-     MODALES
-══════════════════════════════════ -->
-
   <!-- Auth Modal -->
   <div class="modal fade" id="authModal" tabindex="-1" aria-label="Acceso">
     <div class="modal-dialog modal-dialog-centered">
@@ -431,7 +388,6 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body pt-3">
-          <!-- Role selector cards -->
           <div class="row g-3 mb-4" id="roleCards">
             <div class="col-6">
               <div class="role-card selected" id="tabClient">
@@ -448,8 +404,6 @@
               </div>
             </div>
           </div>
-
-          <!-- Client panel -->
           <div id="panelClient">
             <form id="clientLoginForm">
               <div class="mb-3">
@@ -469,10 +423,7 @@
               </button>
             </form>
           </div>
-
-          <!-- Admin panel -->
           <div id="panelAdmin" style="display:none">
-            <!-- Step 1: phone -->
             <div id="step1Admin">
               <div class="mb-3">
                 <label class="form-label fw-semibold">Número de teléfono</label>
@@ -486,7 +437,6 @@
                 <i class="bi bi-send me-2"></i>Enviar código
               </button>
             </div>
-            <!-- Step 2: code -->
             <div id="step2Admin" style="display:none">
               <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Código enviado a tu número</p>
               <div class="mb-3">
@@ -508,8 +458,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Profile Modal -->
   <div class="modal fade" id="profileModal" tabindex="-1" aria-label="Mi Perfil">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -519,7 +467,6 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <!-- Tabs -->
           <div class="d-flex gap-2 mb-4">
             <button class="btn btn-primary btn-sm active" data-profile-tab="info">
               <i class="bi bi-person me-1"></i>Mis datos
@@ -528,7 +475,6 @@
               <i class="bi bi-bag me-1"></i>Mis pedidos
             </button>
           </div>
-          <!-- Info -->
           <div id="profilePane-info" class="profile-pane active" style="display:block">
             <div class="mb-3">
               <label class="form-label fw-semibold">Nombre</label>
@@ -550,7 +496,6 @@
               </button>
             </div>
           </div>
-          <!-- Orders -->
           <div id="profilePane-orders" class="profile-pane" style="display:none">
             <div id="profileOrdersList">
               <div class="text-center py-3">
@@ -562,8 +507,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Order Modal -->
   <div class="modal fade" id="orderModal" tabindex="-1" aria-label="Confirmar Pedido">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
@@ -642,8 +585,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Product Modal -->
   <div class="modal fade" id="productModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
@@ -714,8 +655,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Category Modal -->
   <div class="modal fade" id="catModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -749,8 +688,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Staff Modal -->
   <div class="modal fade" id="staffModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -789,11 +726,33 @@
     </div>
   </div>
 
-  <!-- Cart Offcanvas (mobile) -->
-  <div class="offcanvas offcanvas-end" id="cartOffcanvas" tabindex="-1" aria-label="Carrito">
+  <div class="offcanvas offcanvas-start" id="categoryOffcanvas" tabindex="-1" aria-labelledby="categoryOffcanvasLabel">
     <div class="offcanvas-header border-bottom">
-      <h5 class="offcanvas-title fw-bold"><i class="bi bi-cart3 me-2"></i>Mi Pedido</h5>
-      <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+      <h5 class="offcanvas-title fw-bold" id="categoryOffcanvasLabel"><i class="bi bi-tags me-2"></i>Categorías</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+    <div class="offcanvas-body">
+      <ul class="nav flex-column" id="categoryListMobile"></ul>
+    </div>
+  </div>
+
+  <div class="offcanvas offcanvas-start" id="adminOffcanvas" tabindex="-1" aria-labelledby="adminOffcanvasLabel">
+    <div class="offcanvas-header border-bottom">
+      <h5 class="offcanvas-title fw-bold" id="adminOffcanvasLabel"><i class="bi bi-grid me-2"></i>Administración</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+    <div class="offcanvas-body">
+      <nav class="nav flex-column" id="adminNavMobile"></nav>
+      <button type="button" class="btn btn-outline-danger btn-sm w-100 mt-4" id="logoutAdminMobileBtn">
+        <i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión
+      </button>
+    </div>
+  </div>
+
+  <div class="offcanvas offcanvas-end" id="cartOffcanvas" tabindex="-1" aria-labelledby="cartOffcanvasLabel">
+    <div class="offcanvas-header border-bottom">
+      <h5 class="offcanvas-title fw-bold" id="cartOffcanvasLabel"><i class="bi bi-cart3 me-2"></i>Mi Pedido</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
     </div>
     <div class="offcanvas-body p-0 d-flex flex-column">
       <div class="flex-grow-1 p-3 overflow-auto">
@@ -803,21 +762,26 @@
         </div>
         <div id="cartItemsListMobile"></div>
       </div>
-      <div class="p-3 border-top">
+      <div class="p-3 border-top" id="cartFooterMobile" hidden>
+        <div class="d-flex justify-content-between small mb-2">
+          <span>Subtotal</span><span id="cartSubtotalMobile">S/ 0.00</span>
+        </div>
         <div class="d-flex justify-content-between fw-bold mb-3">
           <span>Total</span><span id="cartTotalMobile">S/ 0.00</span>
         </div>
-        <button class="btn btn-primary w-100 mb-2" id="sendOrderBtnMobile">
+        <button type="button" class="btn btn-primary w-100 mb-2" id="sendOrderBtnMobile">
           <i class="bi bi-send me-2"></i>Enviar Pedido
+        </button>
+        <button type="button" class="btn btn-outline-success w-100 mb-2" id="shareWhatsappBtnMobile">
+          <i class="bi bi-whatsapp me-2"></i>Compartir por WhatsApp
+        </button>
+        <button type="button" class="btn btn-outline-danger w-100" id="clearCartBtnMobile">
+          <i class="bi bi-trash me-2"></i>Vaciar carrito
         </button>
       </div>
     </div>
   </div>
-
-  <!-- Toast container -->
   <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
-
-  <!-- ── Scripts ── -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -831,37 +795,6 @@
   <script src="js/dashboard.js"></script>
   <script src="js/admin.js"></script>
   <script src="js/app.js"></script>
-  <script>
-    // Mobile cart button
-    document.getElementById('cartMobileBtn')?.addEventListener('click', () => {
-      new bootstrap.Offcanvas(document.getElementById('cartOffcanvas')).show();
-    });
-    // Second theme toggle (admin header)
-    document.getElementById('themeToggleBtn2')?.addEventListener('click', () => {
-      const next = document.body.dataset.bsTheme === 'dark' ? 'light' : 'dark';
-      document.body.dataset.bsTheme = next;
-      localStorage.setItem('kk_theme', next);
-    });
-    // Second logout btn
-    document.getElementById('logoutAdminBtn2')?.addEventListener('click', () => {
-      Auth.logout().then(() => { App.showPage('store'); showToast('Sesión cerrada', 'info'); });
-    });
-    // Sync cart to offcanvas
-    const origRender = Cart.render.bind(Cart);
-    Cart.render = function () {
-      origRender();
-      // Sync totals to mobile offcanvas
-      const mob = document.getElementById('cartTotalMobile');
-      const tot = document.getElementById('cartTotal');
-      if (mob && tot) mob.textContent = tot.textContent;
-      const mobList = document.getElementById('cartItemsListMobile');
-      const desList = document.getElementById('cartItemsList');
-      if (mobList && desList) mobList.innerHTML = desList.innerHTML;
-      const mobEmpty = document.getElementById('cartEmptyMobile');
-      const desEmpty = document.getElementById('cartEmpty');
-      if (mobEmpty && desEmpty) mobEmpty.style.display = desEmpty.style.display;
-    };
-  </script>
 </body>
 
 </html>
