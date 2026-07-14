@@ -259,7 +259,7 @@
             </div>
           </div>
           <div class="admin-section" id="sec-orders">
-            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+            <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
               <h2 class="section-title mb-0"><i class="bi bi-receipt me-2"></i>Pedidos</h2>
               <div class="btn-group btn-group-sm">
                 <button class="btn btn-primary active" data-orders-filter="all">Todos</button>
@@ -267,6 +267,17 @@
                 <button class="btn btn-outline-success" data-orders-filter="done">Completados</button>
                 <button class="btn btn-outline-danger" data-orders-filter="rejected">Rechazados</button>
               </div>
+            </div>
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2 orders-history-toolbar">
+              <div class="btn-group btn-group-sm" aria-label="Período del historial">
+                <button class="btn btn-primary active" data-orders-period="day">Hoy</button>
+                <button class="btn btn-outline-secondary" data-orders-period="week">Semana</button>
+                <button class="btn btn-outline-secondary" data-orders-period="month">Mes</button>
+              </div>
+              <button type="button" class="btn btn-outline-success btn-sm" id="ordersExportBtn">
+                <i class="bi bi-file-earmark-excel me-1"></i>Descargar historial
+                <span class="badge text-bg-secondary ms-1" id="ordersFilteredCount">0</span>
+              </button>
             </div>
             <div class="row g-3" id="ordersContainer"></div>
           </div>
@@ -623,15 +634,32 @@
                   <option value="">Sin subcategoría</option>
                 </select>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label fw-semibold">Stock</label>
-                <input type="number" class="form-control" id="productStock" min="0" placeholder="∞ ilimitado" />
+                <input type="number" class="form-control" id="productStock" min="0" step="1" placeholder="∞ ilimitado" />
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Unidad de venta</label>
+                <select class="form-select" id="productUnit">
+                  <option value="Unidad">Unidad</option>
+                  <option value="Docena">Docena</option>
+                  <option value="Caja">Caja</option>
+                  <option value="Paquete">Paquete</option>
+                  <option value="Kg">Kg</option>
+                  <option value="Gramo">Gramo</option>
+                  <option value="Litro">Litro</option>
+                  <option value="Mililitro">Mililitro</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label fw-semibold">Descuento (%)</label>
+                <input type="number" class="form-control" id="productDiscount" min="0" max="100" step="1" value="0" />
+              </div>
+              <div class="col-md-2">
                 <label class="form-label fw-semibold">Emoji</label>
                 <input type="text" class="form-control" id="productEmoji" placeholder="🛍️" maxlength="4" />
               </div>
-              <div class="col-md-4">
+              <div class="col-md-2">
                 <label class="form-label fw-semibold">Estado</label>
                 <div class="form-check form-switch mt-2">
                   <input class="form-check-input" type="checkbox" id="productActive" checked />
@@ -639,11 +667,22 @@
                 </div>
               </div>
               <div class="col-12">
-                <label class="form-label fw-semibold">URL de imagen</label>
+                <label class="form-label fw-semibold" for="productImageFile">Subir imagen</label>
+                <input type="file" class="form-control" id="productImageFile"
+                  accept=".jpg,.jpeg,.png,.webp,.gif,.svg,image/jpeg,image/png,image/webp,image/gif,image/svg+xml" />
+                <div class="form-text">Formatos: JPG, JPEG, PNG, WEBP, GIF y SVG. Tamaño máximo: 5 MB.</div>
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold" for="productImageUrl">URL de imagen alternativa</label>
                 <input type="url" class="form-control" id="productImageUrl" placeholder="https://…" />
-                <img id="productImgPreview" src="" class="mt-2 rounded"
-                  style="max-height:120px;object-fit:cover;display:block" onerror="this.style.display='none'"
-                  onload="this.style.display='block'" />
+              </div>
+              <div class="col-12">
+                <div class="product-image-preview border rounded p-2">
+                  <div id="productImgPreviewEmpty" class="product-image-preview-empty text-muted">
+                    <i class="bi bi-image me-2"></i>Vista previa de la imagen
+                  </div>
+                  <img id="productImgPreview" alt="Vista previa del producto" />
+                </div>
               </div>
             </div>
             <div class="d-flex justify-content-end gap-2 mt-4">
@@ -786,6 +825,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="js/config.js"></script>
   <script src="js/firebase.js"></script>
   <script src="js/auth.js"></script>

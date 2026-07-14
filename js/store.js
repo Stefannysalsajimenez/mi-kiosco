@@ -20,6 +20,7 @@ const Store = (() => {
   let productsLoaded = false;
   let searchTimer = null;
   let renderFrame = null;
+  const imageUrlCache = new Map();
 
   function notify(message, type = 'info') {
     if (typeof window.showToast === 'function') {
@@ -101,11 +102,33 @@ const Store = (() => {
       description: String(data.description || '').trim(),
       price: normalizePrice(data.price),
       stock: normalizeStock(data.stock),
+      unit: String(data.unit || 'Unidad').trim() || 'Unidad',
+      discountPercent: Math.max(0, Math.min(100, Number(data.discountPercent || 0))),
+      imagePath: data.imagePath ? String(data.imagePath).trim() : null,
       imageUrl: data.imageUrl ? String(data.imageUrl).trim() : null,
+      resolvedImageUrl: null,
       categoryId: normalizeId(data.categoryId) || null,
       subcategoryId: normalizeId(data.subcategoryId) || null,
       active: data.active !== false
     };
+  }
+
+  async function resolveProductImage(product) {
+    const legacyUrl = normalizeImageUrl(product.imageUrl);
+    if (legacyUrl) return { ...product, resolvedImageUrl: legacyUrl };
+    if (!product.imagePath || !window.storage) return product;
+
+    try {
+      if (!imageUrlCache.has(product.imagePath)) {
+        imageUrlCache.set(product.imagePath, window.storage.ref(product.imagePath).getDownloadURL());
+      }
+      const resolvedImageUrl = await imageUrlCache.get(product.imagePath);
+      return { ...product, resolvedImageUrl };
+    } catch (error) {
+      imageUrlCache.delete(product.imagePath);
+      console.warn('No se pudo obtener la imagen del producto:', product.imagePath, error?.message || error);
+      return product;
+    }
   }
 
   function normalizeImageUrl(value) {
@@ -259,13 +282,13 @@ const Store = (() => {
     unsubscribeProducts = database
       .collection(collections.products)
       .where('active', '==', true)
-      .onSnapshot(snapshot => {
-        products = sortByName(
-          snapshot.docs
-            .map(normalizeProduct)
-            .filter(product => product.id && product.active)
-        );
+      .onSnapshot(async snapshot => {
+        const normalizedProducts = snapshot.docs
+          .map(normalizeProduct)
+          .filter(product => product.id && product.active);
+        products = sortByName(await Promise.all(normalizedProducts.map(resolveProductImage)));
         productsLoaded = true;
+        getCart()?.syncProducts?.(products);
         scheduleProductsRender();
         window.dispatchEvent(new CustomEvent('store:products-updated', {
           detail: { products: getProducts() }
@@ -426,7 +449,7 @@ const Store = (() => {
   }
 
   function createProductImage(product) {
-    const imageUrl = normalizeImageUrl(product.imageUrl);
+    const imageUrl = normalizeImageUrl(product.resolvedImageUrl || product.imageUrl);
     if (!imageUrl) return createImagePlaceholder();
 
     const image = document.createElement('img');
@@ -441,25 +464,53 @@ const Store = (() => {
     return image;
   }
 
+  function toDate(value) {
+    if (!value) return null;
+    if (typeof value.toDate === 'function') return value.toDate();
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function isNewProduct(product) {
+    const createdAt = toDate(product.createdAt);
+    if (!createdAt) return false;
+    return Date.now() - createdAt.getTime() <= 14 * 24 * 60 * 60 * 1000;
+  }
+
+  function createProductLabels(product) {
+    const labels = document.createElement('div');
+    labels.className = 'product-labels position-absolute top-0 start-0 m-2 d-flex flex-column align-items-start gap-1';
+
+    if (product.stock !== null && product.stock <= 0) {
+      const soldOut = document.createElement('span');
+      soldOut.className = 'badge bg-secondary';
+      soldOut.textContent = 'Agotado';
+      labels.append(soldOut);
+    }
+
+    if (product.discountPercent > 0 && product.stock !== 0) {
+      const discount = document.createElement('span');
+      discount.className = 'badge bg-danger';
+      discount.textContent = `Descuento ${product.discountPercent}%`;
+      labels.append(discount);
+    }
+
+    if (isNewProduct(product) && product.stock !== 0) {
+      const recent = document.createElement('span');
+      recent.className = 'badge bg-primary';
+      recent.textContent = 'Nuevo';
+      labels.append(recent);
+    }
+
+    return labels.childElementCount ? labels : null;
+  }
+
   function createStockBadge(product) {
-    if (product.stock === null) return null;
-
+    if (product.stock === null || product.stock <= 0 || product.stock > 5) return null;
     const badge = document.createElement('span');
-    badge.className = 'badge position-absolute top-0 end-0 m-2 stock-badge';
-
-    if (product.stock <= 0) {
-      badge.classList.add('bg-secondary');
-      badge.textContent = 'Agotado';
-      return badge;
-    }
-
-    if (product.stock <= 5) {
-      badge.classList.add('bg-danger');
-      badge.textContent = `Últimos ${product.stock}`;
-      return badge;
-    }
-
-    return null;
+    badge.className = 'badge position-absolute top-0 end-0 m-2 stock-badge bg-danger';
+    badge.textContent = `Últimos ${product.stock}`;
+    return badge;
   }
 
   function createActionButton(action, product, options = {}) {
@@ -487,10 +538,16 @@ const Store = (() => {
       html: '<i class="bi bi-dash" aria-hidden="true"></i>'
     });
 
-    const value = document.createElement('span');
-    value.className = 'input-group-text qty-val flex-grow-1 justify-content-center';
-    value.textContent = String(quantity);
-    value.setAttribute('aria-label', `Cantidad ${quantity}`);
+    const value = document.createElement('input');
+    value.type = 'number';
+    value.inputMode = 'numeric';
+    value.className = 'form-control form-control-sm qty-val text-center';
+    value.dataset.storeQtyInput = 'true';
+    value.dataset.productId = product.id;
+    value.min = '1';
+    value.max = String(product.stock === null ? 999 : product.stock);
+    value.value = String(quantity);
+    value.setAttribute('aria-label', `Cantidad de ${product.name}`);
 
     const stockReached = product.stock !== null && quantity >= product.stock;
     const increase = createActionButton('increase', product, {
@@ -531,6 +588,9 @@ const Store = (() => {
     imageWrap.className = 'prod-img-wrap position-relative';
     imageWrap.append(createProductImage(product));
 
+    const productLabels = createProductLabels(product);
+    if (productLabels) imageWrap.append(productLabels);
+
     const stockBadge = createStockBadge(product);
     if (stockBadge) imageWrap.append(stockBadge);
 
@@ -558,14 +618,14 @@ const Store = (() => {
 
     const price = document.createElement('span');
     price.className = 'prod-price fw-bold';
-    price.textContent = formatMoney(product.price);
+    price.textContent = `${formatMoney(product.price)} / ${product.unit}`;
 
     priceRow.append(price);
 
     if (product.stock !== null) {
       const stock = document.createElement('small');
       stock.className = product.stock <= 0 ? 'text-danger' : 'text-muted';
-      stock.textContent = `Stock: ${product.stock}`;
+      stock.textContent = `Disponible: ${Math.max(product.stock - quantity, 0)}`;
       priceRow.append(stock);
     }
 
@@ -683,6 +743,19 @@ const Store = (() => {
     handleProductAction(event);
   }
 
+  function handleQuantityChange(event) {
+    const input = event.target.closest('[data-store-qty-input]');
+    if (!input || !input.closest('#productsGrid')) return;
+    getCart()?.setQty?.(input.dataset.productId, input.value);
+  }
+
+  function handleQuantityKeydown(event) {
+    const input = event.target.closest('[data-store-qty-input]');
+    if (!input || event.key !== 'Enter') return;
+    event.preventDefault();
+    input.blur();
+  }
+
   function handleSearchInput(event) {
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => {
@@ -704,6 +777,8 @@ const Store = (() => {
     listenersBound = true;
 
     document.addEventListener('click', handleDocumentClick);
+    document.addEventListener('change', handleQuantityChange);
+    document.addEventListener('keydown', handleQuantityKeydown);
 
     const searchInput = document.getElementById('searchInput');
     searchInput?.addEventListener('input', handleSearchInput);

@@ -1,183 +1,479 @@
-// js/dashboard.js — Dashboard with Chart.js, real Firebase data, Excel export
+'use strict';
+
 const Dashboard = (() => {
-  let salesChart = null, ordersChart = null, period = 'day';
+  let salesChart = null;
+  let ordersChart = null;
+  let period = 'day';
+  let orders = [];
+  let products = [];
+  let unsubscribeOrders = null;
+  let unsubscribeProducts = null;
+  let initialized = false;
+  let refreshTimer = null;
+  let chartScriptPromise = null;
+  let excelScriptPromise = null;
+  const exportLocks = new Set();
 
   function init() {
+    if (initialized) {
+      refresh();
+      return;
+    }
+
+    initialized = true;
     bindPeriodTabs();
     bindDownloads();
-    loadStats();
+    bindThemeRefresh();
+    subscribeRealtimeData();
+    refreshTimer = window.setInterval(refresh, 60000);
+  }
+
+  function refresh() {
+    renderStats();
   }
 
   function bindPeriodTabs() {
-    document.querySelectorAll('[data-dash-period]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-dash-period]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        period = btn.dataset.dashPeriod;
-        loadStats();
+    document.querySelectorAll('[data-dash-period]').forEach(button => {
+      if (button.dataset.dashboardBound === 'true') return;
+      button.dataset.dashboardBound = 'true';
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-dash-period]').forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+        period = button.dataset.dashPeriod || 'day';
+        renderStats();
       });
     });
   }
 
   function bindDownloads() {
-    ['Day', 'Week', 'Month'].forEach(p => {
-      document.getElementById('dl' + p)?.addEventListener('click', () => dlExcel(p.toLowerCase()));
+    const buttons = {
+      dlDay: 'day',
+      dlWeek: 'week',
+      dlMonth: 'month'
+    };
+
+    Object.entries(buttons).forEach(([id, selectedPeriod]) => {
+      const button = document.getElementById(id);
+      if (!button || button.dataset.exportBound === 'true') return;
+      button.dataset.exportBound = 'true';
+      button.addEventListener('click', () => {
+        const list = filterByPeriod(orders, selectedPeriod);
+        exportOrders(list, {
+          period: selectedPeriod,
+          button,
+          filePrefix: 'kiosco'
+        });
+      });
     });
   }
 
-  function getStart(p) {
-    const d = new Date();
-    if (p === 'day') { d.setHours(0, 0, 0, 0); return d; }
-    if (p === 'week') { d.setDate(d.getDate() - (d.getDay() || 7) + 1); d.setHours(0, 0, 0, 0); return d; }
-    d.setDate(1); d.setHours(0, 0, 0, 0); return d;
+  function bindThemeRefresh() {
+    if (window.__dashboardThemeBound) return;
+    window.__dashboardThemeBound = true;
+    window.addEventListener('kiosco:themechange', () => renderCharts(filterByPeriod(orders, period), period));
   }
 
-  function filterByPeriod(orders, p) {
-    const start = getStart(p);
-    return orders.filter(o => {
-      const t = o.createdAt?.toDate?.() || new Date(o.createdAt || 0);
-      return t >= start;
+  function subscribeRealtimeData() {
+    if (typeof unsubscribeOrders === 'function') unsubscribeOrders();
+    if (typeof unsubscribeProducts === 'function') unsubscribeProducts();
+
+    unsubscribeOrders = db.collection(COLL.orders).onSnapshot(snapshot => {
+      orders = snapshot.docs.map(documentSnapshot => ({
+        id: documentSnapshot.id,
+        ...documentSnapshot.data()
+      }));
+      renderStats();
+    }, error => {
+      console.warn('Dashboard pedidos:', error?.code || error);
+      showToast('No se pudieron actualizar los pedidos del dashboard', 'warning');
+    });
+
+    unsubscribeProducts = db.collection(COLL.products).onSnapshot(snapshot => {
+      products = snapshot.docs.map(documentSnapshot => ({
+        id: documentSnapshot.id,
+        ...documentSnapshot.data()
+      }));
+      renderLowStockStats();
+    }, error => {
+      console.warn('Dashboard productos:', error?.code || error);
     });
   }
 
-  async function loadStats() {
-    try {
-      const snap = await db.collection(COLL.orders).get();
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const list = filterByPeriod(all, period);
-
-      const revenue = list.filter(o => o.status !== 'rejected').reduce((s, o) => s + (o.total || 0), 0);
-      const total = list.length;
-      const done = list.filter(o => o.status === 'done').length;
-      const pending = list.filter(o => o.status === 'pending').length;
-      const rejected = list.filter(o => o.status === 'rejected').length;
-
-      setText('dashRevenue', `${APP_CONFIG.currency} ${revenue.toFixed(2)}`);
-      setText('dashOrders', total);
-      setText('dashDone', done);
-      setText('dashPending', pending);
-      setText('dashRejected', rejected);
-
-      // Low stock
-      const prodsSnap = await db.collection(COLL.products).get();
-      const prods = prodsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const lowStock = prods.filter(p => p.stock != null && p.stock <= 5 && p.active);
-      setText('dashLowStock', lowStock.length);
-      renderLowStock(lowStock);
-
-      await renderCharts(list, period);
-    } catch (e) { console.warn('Dashboard:', e.message); }
+  function toDate(value) {
+    if (!value) return null;
+    if (typeof value.toDate === 'function') return value.toDate();
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  function setText(id, val) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = val;
-  }
+  function getPeriodRange(selectedPeriod, baseDate = new Date()) {
+    const start = new Date(baseDate);
+    const end = new Date(baseDate);
 
-  function renderLowStock(prods) {
-    const el = document.getElementById('lowStockList');
-    if (!el) return;
-    if (!prods.length) { el.innerHTML = '<li class="list-group-item text-muted small">Sin stock bajo</li>'; return; }
-    el.innerHTML = prods.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center small">
-      <span><i class="bi bi-box-seam me-2 text-warning"></i>${p.name}</span>
-      <span class="badge bg-danger rounded-pill">${p.stock}</span>
-    </li>`).join('');
-  }
-
-  async function renderCharts(orders, p) {
-    if (!window.Chart) {
-      await loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
+    if (selectedPeriod === 'day') {
+      start.setHours(0, 0, 0, 0);
+      end.setTime(start.getTime());
+      end.setDate(end.getDate() + 1);
+      return { start, end };
     }
-    const { labels, salesData, ordersData } = buildChartData(orders, p);
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--bs-primary').trim() || '#f97316';
+
+    if (selectedPeriod === 'week') {
+      const day = start.getDay();
+      const daysFromMonday = day === 0 ? 6 : day - 1;
+      start.setDate(start.getDate() - daysFromMonday);
+      start.setHours(0, 0, 0, 0);
+      end.setTime(start.getTime());
+      end.setDate(end.getDate() + 7);
+      return { start, end };
+    }
+
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    end.setTime(start.getTime());
+    end.setMonth(end.getMonth() + 1);
+    return { start, end };
+  }
+
+  function filterByPeriod(list, selectedPeriod) {
+    const { start, end } = getPeriodRange(selectedPeriod);
+    return list.filter(order => {
+      const createdAt = toDate(order.createdAt);
+      return createdAt && createdAt >= start && createdAt < end;
+    });
+  }
+
+  function renderStats() {
+    const list = filterByPeriod(orders, period);
+    const revenue = list
+      .filter(order => order.status !== 'rejected')
+      .reduce((sum, order) => sum + Number(order.total || 0), 0);
+
+    setText('dashRevenue', `${getCurrency()} ${revenue.toFixed(2)}`);
+    setText('dashOrders', list.length);
+    setText('dashDone', list.filter(order => order.status === 'done').length);
+    setText('dashPending', list.filter(order => order.status === 'pending').length);
+    setText('dashRejected', list.filter(order => order.status === 'rejected').length);
+
+    renderLowStockStats();
+    renderCharts(list, period);
+  }
+
+  function renderLowStockStats() {
+    const lowStock = products.filter(product => {
+      const stock = Number(product.stock);
+      return product.active !== false && Number.isFinite(stock) && stock <= 5;
+    });
+
+    setText('dashLowStock', lowStock.length);
+    renderLowStock(lowStock);
+  }
+
+  function setText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = String(value);
+  }
+
+  function getCurrency() {
+    return window.APP_CONFIG?.currency || 'S/';
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function renderLowStock(list) {
+    const element = document.getElementById('lowStockList');
+    if (!element) return;
+
+    if (!list.length) {
+      element.innerHTML = '<li class="list-group-item text-muted small">Sin stock bajo</li>';
+      return;
+    }
+
+    element.innerHTML = list.map(product => `
+      <li class="list-group-item d-flex justify-content-between align-items-center small">
+        <span><i class="bi bi-box-seam me-2 text-warning"></i>${escapeHtml(product.name)}</span>
+        <span class="badge bg-danger rounded-pill">${Number(product.stock)}</span>
+      </li>`).join('');
+  }
+
+  async function ensureChartLibrary() {
+    if (window.Chart) return;
+    if (!chartScriptPromise) {
+      chartScriptPromise = loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
+    }
+    await chartScriptPromise;
+  }
+
+  async function renderCharts(list, selectedPeriod) {
+    try {
+      await ensureChartLibrary();
+    } catch (error) {
+      console.warn('No se pudo cargar Chart.js:', error);
+      return;
+    }
+
+    const { labels, salesData, ordersData } = buildChartData(list, selectedPeriod);
+    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--app-muted').trim() || '#6c757d';
+    const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--app-border').trim() || '#dee2e6';
 
     const salesCanvas = document.getElementById('salesChart');
     if (salesCanvas) {
-      if (salesChart) salesChart.destroy();
+      salesChart?.destroy();
       salesChart = new Chart(salesCanvas, {
         type: 'bar',
-        data: { labels, datasets: [{ label: `Ventas (${APP_CONFIG.currency})`, data: salesData, backgroundColor: '#f9731688', borderColor: '#f97316', borderWidth: 2, borderRadius: 4 }] },
+        data: {
+          labels,
+          datasets: [{
+            label: `Ventas (${getCurrency()})`,
+            data: salesData,
+            backgroundColor: '#f9731688',
+            borderColor: '#f97316',
+            borderWidth: 2,
+            borderRadius: 4
+          }]
+        },
         options: {
-          responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-          scales: { x: { ticks: { color: '#9898b0' }, grid: { color: '#ffffff11' } }, y: { ticks: { color: '#9898b0', callback: v => `${APP_CONFIG.currency}${v}` }, grid: { color: '#ffffff11' }, beginAtZero: true } }
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: textColor }, grid: { color: gridColor } },
+            y: {
+              ticks: { color: textColor, callback: value => `${getCurrency()}${value}` },
+              grid: { color: gridColor },
+              beginAtZero: true
+            }
+          }
         }
       });
     }
 
     const ordersCanvas = document.getElementById('ordersChart');
     if (ordersCanvas) {
-      if (ordersChart) ordersChart.destroy();
+      ordersChart?.destroy();
       ordersChart = new Chart(ordersCanvas, {
         type: 'line',
-        data: { labels, datasets: [{ label: 'Pedidos', data: ordersData, borderColor: '#06b6d4', backgroundColor: '#06b6d422', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.3 }] },
+        data: {
+          labels,
+          datasets: [{
+            label: 'Pedidos',
+            data: ordersData,
+            borderColor: '#06b6d4',
+            backgroundColor: '#06b6d422',
+            borderWidth: 2,
+            pointRadius: 4,
+            fill: true,
+            tension: 0.3
+          }]
+        },
         options: {
-          responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-          scales: { x: { ticks: { color: '#9898b0' }, grid: { color: '#ffffff11' } }, y: { ticks: { color: '#9898b0', stepSize: 1 }, grid: { color: '#ffffff11' }, beginAtZero: true } }
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: textColor }, grid: { color: gridColor } },
+            y: { ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor }, beginAtZero: true }
+          }
         }
       });
     }
   }
 
-  function buildChartData(orders, p) {
-    const now = new Date();
-    let labels = [], salesMap = {}, ordersMap = {};
+  function buildChartData(list, selectedPeriod) {
+    const { start, end } = getPeriodRange(selectedPeriod);
+    const labels = [];
+    const salesMap = new Map();
+    const ordersMap = new Map();
 
-    if (p === 'day') {
-      for (let h = 0; h < 24; h++) { const l = `${String(h).padStart(2, '0')}h`; labels.push(l); salesMap[l] = 0; ordersMap[l] = 0; }
-      orders.forEach(o => {
-        const t = o.createdAt?.toDate?.() || new Date(0);
-        const k = `${String(t.getHours()).padStart(2, '0')}h`;
-        if (salesMap[k] !== undefined && o.status !== 'rejected') { salesMap[k] += o.total || 0; ordersMap[k]++; }
-      });
-    } else if (p === 'week') {
-      const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-      for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(now.getDate() - i); const l = days[(d.getDay() + 6) % 7]; labels.push(l); salesMap[l] = 0; ordersMap[l] = 0; }
-      orders.forEach(o => {
-        const t = o.createdAt?.toDate?.() || new Date(0);
-        const l = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][(t.getDay() + 6) % 7];
-        if (salesMap[l] !== undefined && o.status !== 'rejected') { salesMap[l] += o.total || 0; ordersMap[l]++; }
+    if (selectedPeriod === 'day') {
+      for (let hour = 0; hour < 24; hour += 1) {
+        const label = `${String(hour).padStart(2, '0')}h`;
+        labels.push(label);
+        salesMap.set(label, 0);
+        ordersMap.set(label, 0);
+      }
+    } else if (selectedPeriod === 'week') {
+      const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+      dayNames.forEach(label => {
+        labels.push(label);
+        salesMap.set(label, 0);
+        ordersMap.set(label, 0);
       });
     } else {
-      const dm = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      for (let d = 1; d <= dm; d++) { const l = `${d}`; labels.push(l); salesMap[l] = 0; ordersMap[l] = 0; }
-      orders.forEach(o => {
-        const t = o.createdAt?.toDate?.() || new Date(0);
-        const l = `${t.getDate()}`;
-        if (salesMap[l] !== undefined && o.status !== 'rejected') { salesMap[l] += o.total || 0; ordersMap[l]++; }
-      });
+      const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const label = String(day);
+        labels.push(label);
+        salesMap.set(label, 0);
+        ordersMap.set(label, 0);
+      }
     }
-    return { labels, salesData: labels.map(l => +(salesMap[l] || 0).toFixed(2)), ordersData: labels.map(l => ordersMap[l] || 0) };
+
+    list.forEach(order => {
+      const createdAt = toDate(order.createdAt);
+      if (!createdAt || createdAt < start || createdAt >= end) return;
+
+      let key;
+      if (selectedPeriod === 'day') {
+        key = `${String(createdAt.getHours()).padStart(2, '0')}h`;
+      } else if (selectedPeriod === 'week') {
+        key = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][createdAt.getDay()];
+      } else {
+        key = String(createdAt.getDate());
+      }
+
+      if (!salesMap.has(key)) return;
+      if (order.status !== 'rejected') {
+        salesMap.set(key, salesMap.get(key) + Number(order.total || 0));
+      }
+      ordersMap.set(key, ordersMap.get(key) + 1);
+    });
+
+    return {
+      labels,
+      salesData: labels.map(label => Number(salesMap.get(label).toFixed(2))),
+      ordersData: labels.map(label => ordersMap.get(label))
+    };
   }
 
-  async function dlExcel(p) {
-    if (!window.XLSX) await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
-    showToast('Generando Excel…', 'info');
+  async function ensureExcelLibrary() {
+    if (window.XLSX) return;
+    if (!excelScriptPromise) {
+      excelScriptPromise = loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    }
+    await excelScriptPromise;
+  }
+
+  function formatPeriodName(selectedPeriod) {
+    return { day: 'Hoy', week: 'Semana', month: 'Mes' }[selectedPeriod] || 'Historial';
+  }
+
+  async function exportOrders(list, options = {}) {
+    const selectedPeriod = options.period || 'day';
+    const lockKey = options.lockKey || `${selectedPeriod}:${options.filePrefix || 'kiosco'}`;
+    const button = options.button || null;
+
+    if (exportLocks.has(lockKey)) return false;
+    exportLocks.add(lockKey);
+
+    const originalHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exportando';
+    }
+
     try {
-      const snap = await db.collection(COLL.orders).get();
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const list = filterByPeriod(all, p);
-      const pNames = { day: 'Hoy', week: 'Semana', month: 'Mes' };
-      const statusLb = { pending: 'Pendiente', done: 'Completado', rejected: 'Rechazado' };
-      const headers = ['ID', 'Cliente', 'Teléfono', 'Productos', 'Total', 'Estado', 'Fecha'];
-      const rows = list.map(o => [
-        o.id.slice(-8), o.customer || '', o.customerPhone || '',
-        (o.items || []).map(i => `${i.name} x${i.qty}`).join(' | '),
-        o.total || 0, statusLb[o.status] || o.status,
-        o.createdAt?.toDate ? o.createdAt.toDate().toLocaleString('es-PE') : ''
-      ]);
-      const revenue = list.filter(o => o.status !== 'rejected').reduce((s, o) => s + (o.total || 0), 0);
-      const summary = [['Período', pNames[p] || p], ['Pedidos', list.length], ['Ingresos', revenue.toFixed(2)], ['Completados', list.filter(o => o.status === 'done').length]];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), 'Pedidos');
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), 'Resumen');
-      XLSX.writeFile(wb, `kiosco-${p}-${new Date().toISOString().slice(0, 10)}.xlsx`);
-      showToast('Excel descargado ✓', 'success');
-    } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+      await ensureExcelLibrary();
+
+      const statusLabels = {
+        pending: 'Pendiente',
+        done: 'Completado',
+        rejected: 'Rechazado'
+      };
+
+      const headers = [
+        'ID', 'Cliente', 'Teléfono', 'Productos', 'Unidad', 'Total', 'Estado',
+        'Entrega', 'Dirección', 'Fecha', 'Notas'
+      ];
+
+      const rows = list.map(order => {
+        const createdAt = toDate(order.createdAt);
+        const units = [...new Set((order.items || []).map(item => item.unit || 'Unidad'))].join(' | ');
+        return [
+          order.id,
+          order.customer || '',
+          order.customerPhone || '',
+          (order.items || []).map(item => `${item.name} x${item.qty}`).join(' | '),
+          units,
+          Number(order.total || 0),
+          statusLabels[order.status] || order.status || '',
+          order.deliveryType === 'delivery' ? 'Delivery' : 'Recojo en tienda',
+          order.deliveryAddress || '',
+          createdAt ? createdAt.toLocaleString('es-PE') : '',
+          order.notes || ''
+        ];
+      });
+
+      const revenue = list
+        .filter(order => order.status !== 'rejected')
+        .reduce((sum, order) => sum + Number(order.total || 0), 0);
+
+      const summary = [
+        ['Período', options.periodLabel || formatPeriodName(selectedPeriod)],
+        ['Pedidos', list.length],
+        ['Ingresos', Number(revenue.toFixed(2))],
+        ['Pendientes', list.filter(order => order.status === 'pending').length],
+        ['Completados', list.filter(order => order.status === 'done').length],
+        ['Rechazados', list.filter(order => order.status === 'rejected').length]
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      const ordersSheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ordersSheet['!cols'] = [
+        { wch: 24 }, { wch: 22 }, { wch: 14 }, { wch: 48 }, { wch: 18 },
+        { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 34 }, { wch: 22 }, { wch: 36 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, ordersSheet, 'Pedidos');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summary), 'Resumen');
+
+      const date = new Date().toISOString().slice(0, 10);
+      const prefix = String(options.filePrefix || 'kiosco').replace(/[^a-z0-9_-]/gi, '-');
+      XLSX.writeFile(workbook, `${prefix}-${selectedPeriod}-${date}.xlsx`, { compression: true });
+      showToast('Excel descargado', 'success');
+      return true;
+    } catch (error) {
+      console.error('Exportación Excel:', error);
+      showToast(`No se pudo exportar el Excel: ${error.message}`, 'danger');
+      return false;
+    } finally {
+      exportLocks.delete(lockKey);
+      if (button) {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+        button.innerHTML = originalHtml;
+      }
+    }
   }
 
-  function loadScript(src) {
-    return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  function loadScript(source) {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${source}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === 'true') {
+          resolve();
+          return;
+        }
+        existing.addEventListener('load', resolve, { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = source;
+      script.async = true;
+      script.addEventListener('load', () => {
+        script.dataset.loaded = 'true';
+        resolve();
+      }, { once: true });
+      script.addEventListener('error', () => reject(new Error(`No se pudo cargar ${source}`)), { once: true });
+      document.head.appendChild(script);
+    });
   }
 
-  return { init };
+  return {
+    init,
+    refresh,
+    getPeriodRange,
+    filterByPeriod,
+    exportOrders
+  };
 })();
+
+window.Dashboard = Dashboard;

@@ -1,6 +1,14 @@
 // js/admin.js — Admin CRUD: products, categories, caja, horario, personal, apariencia
 const Admin = (() => {
   let prods = [], cats = [], unsubP = null, unsubC = null, ready = false, staffCache = [];
+  let selectedProductImageFile = null;
+  let currentProductImagePath = null;
+  let currentProductImageUrl = null;
+  let previewObjectUrl = null;
+  const productImageUrlCache = new Map();
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+  const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']);
+  const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg']);
 
   function init() {
     if (ready) return;
@@ -19,8 +27,10 @@ const Admin = (() => {
       cats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
       renderCategories(); populateCatSelect();
     }, e => console.warn('cats:', e.code));
-    unsubP = db.collection(COLL.products).onSnapshot(snap => {
-      prods = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+    unsubP = db.collection(COLL.products).onSnapshot(async snap => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      prods = await Promise.all(list.map(resolveProductImage));
+      prods.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
       renderProducts();
     }, e => console.warn('prods:', e.code));
   }
@@ -43,106 +53,347 @@ const Admin = (() => {
     });
   }
 
-  // ── PRODUCTS ──────────────────────────────────────────────────────────────
+  // PRODUCTS
+  async function resolveProductImage(product) {
+    if (product.imageUrl) return { ...product, resolvedImageUrl: product.imageUrl };
+    if (!product.imagePath || !window.storage) return { ...product, resolvedImageUrl: null };
+
+    try {
+      if (!productImageUrlCache.has(product.imagePath)) {
+        productImageUrlCache.set(product.imagePath, window.storage.ref(product.imagePath).getDownloadURL());
+      }
+      const resolvedImageUrl = await productImageUrlCache.get(product.imagePath);
+      return { ...product, resolvedImageUrl };
+    } catch (error) {
+      productImageUrlCache.delete(product.imagePath);
+      console.warn('Imagen de producto:', error?.message || error);
+      return { ...product, resolvedImageUrl: null };
+    }
+  }
+
   function renderProducts() {
     const grid = document.getElementById('adminProductsGrid');
     if (!grid) return;
-    if (!prods.length) { grid.innerHTML = `<div class="col-12 text-center py-5"><i class="bi bi-box display-4 text-muted"></i><p class="mt-3 text-muted">Sin productos</p></div>`; return; }
-    grid.innerHTML = prods.map(p => `
-      <div class="col-sm-6 col-md-4 col-xl-3">
-        <div class="card h-100 ${!p.active ? 'opacity-50' : ''}">
-          <div class="card-img-wrap" style="height:140px;overflow:hidden">
-            ${p.imageUrl ? `<img src="${p.imageUrl}" class="card-img-top h-100 w-100" style="object-fit:cover" onerror="this.parentElement.innerHTML='<div class=\\'d-flex align-items-center justify-content-center h-100 bg-secondary\\'><i class=\\'bi bi-image text-white display-5\\'></i></div>'">`
-        : `<div class="d-flex align-items-center justify-content-center h-100 bg-secondary"><i class="bi bi-bag display-5 text-white"></i></div>`}
-          </div>
-          <div class="card-body p-2">
-            <h6 class="card-title mb-1 small fw-bold">${esc(p.name)}</h6>
-            <div class="d-flex justify-content-between align-items-center">
-              <span class="text-primary fw-bold">${APP_CONFIG.currency} ${Number(p.price).toFixed(2)}</span>
-              <span class="badge ${p.active ? 'bg-success' : 'bg-secondary'}">${p.active ? 'Activo' : 'Inactivo'}</span>
+    if (!prods.length) {
+      grid.innerHTML = '<div class="col-12 text-center py-5"><i class="bi bi-box display-4 text-muted"></i><p class="mt-3 text-muted">Sin productos</p></div>';
+      return;
+    }
+
+    grid.innerHTML = prods.map(product => {
+      const imageUrl = product.resolvedImageUrl || product.imageUrl || '';
+      const unit = product.unit || 'Unidad';
+      const discount = Number(product.discountPercent || 0);
+      return `
+        <div class="col-sm-6 col-md-4 col-xl-3">
+          <div class="card h-100 ${product.active === false ? 'opacity-50' : ''}">
+            <div class="card-img-wrap" style="height:140px;overflow:hidden">
+              ${imageUrl
+                ? `<img src="${esc(imageUrl)}" alt="${esc(product.name)}" class="card-img-top h-100 w-100" style="object-fit:cover" onerror="this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 bg-secondary\'><i class=\'bi bi-image text-white display-5\'></i></div>'">`
+                : '<div class="d-flex align-items-center justify-content-center h-100 bg-secondary"><i class="bi bi-bag display-5 text-white"></i></div>'}
             </div>
-            ${p.stock != null ? `<small class="text-muted">Stock: ${p.stock}</small>` : ''}
+            <div class="card-body p-2">
+              <h6 class="card-title mb-1 small fw-bold">${esc(product.name)}</h6>
+              <div class="d-flex justify-content-between align-items-center gap-2">
+                <span class="text-primary fw-bold">${APP_CONFIG.currency} ${Number(product.price || 0).toFixed(2)}</span>
+                <span class="badge ${product.active !== false ? 'bg-success' : 'bg-secondary'}">${product.active !== false ? 'Activo' : 'Inactivo'}</span>
+              </div>
+              <small class="text-muted d-block">Unidad: ${esc(unit)}</small>
+              ${product.stock != null ? `<small class="text-muted d-block">Stock: ${Number(product.stock)}</small>` : ''}
+              ${discount > 0 ? `<small class="text-danger d-block">Descuento: ${discount}%</small>` : ''}
+            </div>
+            <div class="card-footer p-2 d-flex gap-1">
+              <button class="btn btn-outline-primary btn-sm flex-grow-1" onclick="Admin.editProduct('${product.id}')" aria-label="Editar ${esc(product.name)}"><i class="bi bi-pencil"></i></button>
+              <button class="btn btn-outline-danger btn-sm flex-grow-1" onclick="Admin.deleteProduct('${product.id}')" aria-label="Eliminar ${esc(product.name)}"><i class="bi bi-trash"></i></button>
+            </div>
           </div>
-          <div class="card-footer p-2 d-flex gap-1">
-            <button class="btn btn-outline-primary btn-sm flex-grow-1" onclick="Admin.editProduct('${p.id}')"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-outline-danger btn-sm flex-grow-1" onclick="Admin.deleteProduct('${p.id}')"><i class="bi bi-trash"></i></button>
-          </div>
-        </div>
-      </div>`).join('');
+        </div>`;
+    }).join('');
   }
 
   function bindProductModal() {
     document.getElementById('btnAddProduct')?.addEventListener('click', () => openProductModal(null));
     document.getElementById('productForm')?.addEventListener('submit', saveProduct);
-    document.getElementById('productImageUrl')?.addEventListener('input', e => {
-      const prev = document.getElementById('productImgPreview');
-      if (prev) prev.src = e.target.value;
+    document.getElementById('productImageUrl')?.addEventListener('input', event => {
+      if (selectedProductImageFile) return;
+      currentProductImageUrl = event.target.value.trim() || null;
+      setProductPreview(currentProductImageUrl);
     });
+    document.getElementById('productImageFile')?.addEventListener('change', handleProductImageSelection);
+  }
+
+  function revokePreviewObjectUrl() {
+    if (!previewObjectUrl) return;
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = null;
+  }
+
+  function setProductPreview(source) {
+    const preview = document.getElementById('productImgPreview');
+    const placeholder = document.getElementById('productImgPreviewEmpty');
+    if (!preview) return;
+
+    if (!source) {
+      preview.removeAttribute('src');
+      preview.style.display = 'none';
+      if (placeholder) {
+        placeholder.style.display = 'flex';
+        placeholder.innerHTML = '<i class="bi bi-image me-2"></i>Vista previa de la imagen';
+      }
+      return;
+    }
+
+    preview.onload = () => {
+      preview.style.display = 'block';
+      if (placeholder) placeholder.style.display = 'none';
+    };
+    preview.onerror = () => {
+      preview.style.display = 'none';
+      if (placeholder) {
+        placeholder.style.display = 'flex';
+        placeholder.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>No se pudo mostrar la imagen';
+      }
+    };
+    preview.src = source;
+  }
+
+  async function validateImageFile(file) {
+    if (!file) throw new Error('Selecciona una imagen');
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!ALLOWED_IMAGE_EXTENSIONS.has(extension) || (file.type && !ALLOWED_IMAGE_TYPES.has(file.type))) {
+      throw new Error('Formato no permitido. Usa JPG, JPEG, PNG, WEBP, GIF o SVG');
+    }
+    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 5 MB');
+    if (file.size === 0) throw new Error('El archivo está vacío');
+
+    if (extension === 'svg') {
+      const content = await file.text();
+      if (!/<svg[\s>]/i.test(content) || /<script[\s>]/i.test(content) || /\son[a-z]+\s*=/i.test(content)) {
+        throw new Error('El archivo SVG contiene contenido no permitido');
+      }
+    }
+  }
+
+  async function handleProductImageSelection(event) {
+    const file = event.target.files?.[0] || null;
+    selectedProductImageFile = null;
+    revokePreviewObjectUrl();
+
+    if (!file) {
+      setProductPreview(currentProductImageUrl);
+      return;
+    }
+
+    try {
+      await validateImageFile(file);
+      selectedProductImageFile = file;
+      previewObjectUrl = URL.createObjectURL(file);
+      setProductPreview(previewObjectUrl);
+    } catch (error) {
+      event.target.value = '';
+      setProductPreview(currentProductImageUrl);
+      showToast(error.message, 'danger');
+    }
   }
 
   function openProductModal(id) {
     const form = document.getElementById('productForm');
     if (!form) return;
+
     form.reset();
+    revokePreviewObjectUrl();
+    selectedProductImageFile = null;
+    currentProductImagePath = null;
+    currentProductImageUrl = null;
     document.getElementById('productId').value = '';
     document.getElementById('productModalTitle').textContent = id ? 'Editar Producto' : 'Nuevo Producto';
     document.getElementById('productActive').checked = true;
-    const prev = document.getElementById('productImgPreview'); if (prev) prev.src = '';
+    document.getElementById('productUnit').value = 'Unidad';
+    document.getElementById('productDiscount').value = '0';
+    setProductPreview(null);
     populateCatSelect();
+
     if (id) {
-      const p = prods.find(x => x.id === id); if (!p) return;
-      document.getElementById('productId').value = p.id;
-      document.getElementById('productName').value = p.name || '';
-      document.getElementById('productDesc').value = p.description || '';
-      document.getElementById('productPrice').value = p.price ?? '';
-      document.getElementById('productStock').value = p.stock ?? '';
-      document.getElementById('productEmoji').value = p.emoji || '';
-      document.getElementById('productImageUrl').value = p.imageUrl || '';
-      document.getElementById('productActive').checked = !!p.active;
-      document.getElementById('productCategory').value = p.categoryId || '';
-      fillSubcatSelect(p.categoryId, p.subcategoryId);
-      if (prev && p.imageUrl) prev.src = p.imageUrl;
+      const product = prods.find(item => item.id === id);
+      if (!product) return;
+
+      document.getElementById('productId').value = product.id;
+      document.getElementById('productName').value = product.name || '';
+      document.getElementById('productDesc').value = product.description || '';
+      document.getElementById('productPrice').value = product.price ?? '';
+      document.getElementById('productStock').value = product.stock ?? '';
+      document.getElementById('productUnit').value = product.unit || 'Unidad';
+      document.getElementById('productDiscount').value = Number(product.discountPercent || 0);
+      document.getElementById('productEmoji').value = product.emoji || '';
+      document.getElementById('productImageUrl').value = product.imageUrl || '';
+      document.getElementById('productActive').checked = product.active !== false;
+      document.getElementById('productCategory').value = product.categoryId || '';
+      fillSubcatSelect(product.categoryId, product.subcategoryId);
+      currentProductImagePath = product.imagePath || null;
+      currentProductImageUrl = product.resolvedImageUrl || product.imageUrl || null;
+      setProductPreview(currentProductImageUrl);
     }
-    const modal = document.getElementById('productModal');
-    new bootstrap.Modal(modal).show();
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('productModal')).show();
   }
 
-  async function saveProduct(e) {
-    e.preventDefault();
-    const id = document.getElementById('productId').value;
-    const price = parseFloat(document.getElementById('productPrice').value);
-    if (isNaN(price) || price < 0) { showToast('Precio inválido', 'danger'); return; }
-    const stockRaw = document.getElementById('productStock').value;
-    const data = {
-      name: document.getElementById('productName').value.trim(),
-      description: document.getElementById('productDesc').value.trim(),
-      emoji: document.getElementById('productEmoji').value.trim() || null,
-      price, stock: stockRaw !== '' ? parseInt(stockRaw) : null,
-      categoryId: document.getElementById('productCategory').value || null,
-      subcategoryId: document.getElementById('productSubcat').value || null,
-      imageUrl: document.getElementById('productImageUrl').value.trim() || null,
-      active: document.getElementById('productActive').checked,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  function sanitizeFileName(name) {
+    return String(name || 'imagen')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .toLowerCase();
+  }
+
+  async function uploadProductImage(productId, file) {
+    if (!window.storage) throw new Error('Firebase Storage no está disponible');
+    await validateImageFile(file);
+    const path = `products/${productId}/${Date.now()}-${sanitizeFileName(file.name)}`;
+    const reference = window.storage.ref(path);
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    const contentTypeByExtension = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+      gif: 'image/gif',
+      svg: 'image/svg+xml'
     };
-    const btn = e.submitter; if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
-    try {
-      if (id) { await db.collection(COLL.products).doc(id).update(data); showToast('Producto actualizado', 'success'); }
-      else { data.createdAt = firebase.firestore.FieldValue.serverTimestamp(); await db.collection(COLL.products).add(data); showToast('Producto creado', 'success'); }
-      bootstrap.Modal.getInstance(document.getElementById('productModal'))?.hide();
-    } catch (err) { showToast('Error: ' + err.message, 'danger'); }
-    finally { if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar'; } }
+    await reference.put(file, {
+      contentType: file.type || contentTypeByExtension[extension],
+      cacheControl: 'public,max-age=31536000,immutable',
+      customMetadata: { productId }
+    });
+    return path;
   }
 
-  function editProduct(id) { openProductModal(id); }
+  async function deleteStorageImage(path) {
+    if (!path || !window.storage) return;
+    try {
+      await window.storage.ref(path).delete();
+      productImageUrlCache.delete(path);
+    } catch (error) {
+      if (error?.code !== 'storage/object-not-found') {
+        console.warn('No se pudo eliminar la imagen anterior:', error?.message || error);
+      }
+    }
+  }
+
+  async function saveProduct(event) {
+    event.preventDefault();
+
+    const id = document.getElementById('productId').value;
+    const name = document.getElementById('productName').value.trim();
+    const price = Number(document.getElementById('productPrice').value);
+    const stockRaw = document.getElementById('productStock').value.trim();
+    const discount = Number(document.getElementById('productDiscount').value || 0);
+    const unit = document.getElementById('productUnit').value || 'Unidad';
+    const enteredImageUrl = document.getElementById('productImageUrl').value.trim();
+
+    if (!name) {
+      showToast('El nombre es obligatorio', 'danger');
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      showToast('Precio inválido', 'danger');
+      return;
+    }
+    if (stockRaw !== '' && (!Number.isInteger(Number(stockRaw)) || Number(stockRaw) < 0)) {
+      showToast('Stock inválido', 'danger');
+      return;
+    }
+    if (!Number.isFinite(discount) || discount < 0 || discount > 100) {
+      showToast('El descuento debe estar entre 0 y 100', 'danger');
+      return;
+    }
+
+    const button = event.submitter;
+    const originalButtonHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando';
+    }
+
+    const productReference = id
+      ? db.collection(COLL.products).doc(id)
+      : db.collection(COLL.products).doc();
+    const previousImagePath = currentProductImagePath;
+    let uploadedImagePath = null;
+
+    try {
+      const data = {
+        name,
+        description: document.getElementById('productDesc').value.trim(),
+        emoji: document.getElementById('productEmoji').value.trim() || null,
+        price,
+        stock: stockRaw === '' ? null : Number(stockRaw),
+        unit,
+        discountPercent: discount,
+        categoryId: document.getElementById('productCategory').value || null,
+        subcategoryId: document.getElementById('productSubcat').value || null,
+        active: document.getElementById('productActive').checked,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      if (selectedProductImageFile) {
+        uploadedImagePath = await uploadProductImage(productReference.id, selectedProductImageFile);
+        data.imagePath = uploadedImagePath;
+        data.imageUrl = null;
+      } else if (enteredImageUrl) {
+        data.imagePath = null;
+        data.imageUrl = enteredImageUrl;
+      } else if (id) {
+        data.imagePath = currentProductImagePath || null;
+        data.imageUrl = currentProductImagePath ? null : (currentProductImageUrl || null);
+      } else {
+        data.imagePath = null;
+        data.imageUrl = null;
+      }
+
+      if (id) {
+        await productReference.update(data);
+      } else {
+        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        await productReference.set(data);
+      }
+
+      if (previousImagePath && previousImagePath !== data.imagePath) {
+        await deleteStorageImage(previousImagePath);
+      }
+
+      showToast(id ? 'Producto actualizado' : 'Producto creado', 'success');
+      bootstrap.Modal.getInstance(document.getElementById('productModal'))?.hide();
+      selectedProductImageFile = null;
+      revokePreviewObjectUrl();
+    } catch (error) {
+      if (uploadedImagePath) await deleteStorageImage(uploadedImagePath);
+      showToast(`No se pudo guardar el producto: ${error.message}`, 'danger');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalButtonHtml;
+      }
+    }
+  }
+
+  function editProduct(id) {
+    openProductModal(id);
+  }
 
   async function deleteProduct(id) {
-    const p = prods.find(x => x.id === id);
-    if (!confirm(`¿Eliminar "${p?.name || 'producto'}"?`)) return;
-    try { await db.collection(COLL.products).doc(id).delete(); showToast('Eliminado', 'info'); }
-    catch (e) { showToast('Error: ' + e.message, 'danger'); }
+    const product = prods.find(item => item.id === id);
+    if (!window.confirm(`¿Eliminar "${product?.name || 'producto'}"?`)) return;
+
+    try {
+      await db.collection(COLL.products).doc(id).delete();
+      await deleteStorageImage(product?.imagePath);
+      showToast('Producto eliminado', 'info');
+    } catch (error) {
+      showToast(`No se pudo eliminar el producto: ${error.message}`, 'danger');
+    }
   }
 
-  // ── CATEGORIES ────────────────────────────────────────────────────────────
+  // Categorías
   function renderCategories() {
     const el = document.getElementById('categoriesTable');
     if (!el) return;
@@ -219,7 +470,7 @@ const Admin = (() => {
     sel.innerHTML = '<option value="">— Categoría principal —</option>' + cats.filter(c => !c.parentId && c.id !== excludeId).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
 
-  // ── CAJA ────────────────────────────────────────────────────────────────
+  // Caja
   function renderCaja() {
     const el = document.getElementById('cajaContent'); if (!el) return;
     const KEY = 'kk_caja_' + new Date().toISOString().slice(0, 10);
@@ -279,7 +530,7 @@ const Admin = (() => {
     } catch (e) { console.warn('caja sales:', e.message); }
   }
 
-  // ── HORARIO ────────────────────────────────────────────────────────────
+  // Horario
   async function loadSchedule() {
     const el = document.getElementById('scheduleContent'); if (!el) return;
     const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -308,7 +559,7 @@ const Admin = (() => {
     });
   }
 
-  // ── PERSONAL ────────────────────────────────────────────────────────────
+  // Personal
   function bindStaffModal() {
     document.getElementById('btnAddStaff')?.addEventListener('click', () => openStaffModal());
     document.getElementById('staffForm')?.addEventListener('submit', saveStaff);
@@ -350,7 +601,7 @@ const Admin = (() => {
     catch (e) { showToast('Error: ' + e.message, 'danger'); }
   }
 
-  // ── BRANDING ────────────────────────────────────────────────────────────
+  // Apariencia
   async function loadBranding() {
     const el = document.getElementById('brandingForm'); if (!el) return;
     try {
@@ -391,7 +642,7 @@ const Admin = (() => {
     style.textContent = `:root{--accent:${color};--accent-rgb:${r},${g},${b};}`;
   }
 
-  function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#039;'); }
 
   return { init, editProduct, deleteProduct, editCat, deleteCat, removeStaff };
 })();
