@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="dark">
 
 <head>
   <meta charset="UTF-8" />
@@ -8,591 +8,859 @@
   <meta name="description" content="Kiosco — Tu tienda digital en tiempo real" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Kiosco</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="icons/icon-192.svg" />
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap"
-    rel="stylesheet" />
-  <!-- Styles -->
-  <link rel="stylesheet" href="css/reset.css" />
-  <link rel="stylesheet" href="css/variables.css" />
-  <link rel="stylesheet" href="css/main.css" />
-  <link rel="stylesheet" href="css/components.css" />
-  <link rel="stylesheet" href="css/animations.css" />
-  <link rel="stylesheet" href="css/extras.css" />
-  <link rel="stylesheet" href="css/admin-sections.css" />
-  <!-- Firebase -->
+  <link rel="icon" href="icons/favicon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <!-- Bootstrap 4.6 (reemplazamos por Bootstrap 5.3 que incluye modo oscuro) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <!-- App CSS -->
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+
+  <!-- ══════════════════════════════════════════════
+     PÁGINA: TIENDA
+══════════════════════════════════════════════ -->
+  <div id="page-store" class="page-view">
+
+    <!-- Header -->
+    <header class="site-header">
+      <div class="header-inner">
+        <a href="#" class="logo-wrap">
+          <span class="logo-icon"><img src="icons/icon-96.png"
+              style="width:32px;height:32px;border-radius:8px;object-fit:cover" alt="logo"
+              onerror="this.outerHTML='<i class=\'bi bi-bag-fill\' style=\'color:var(--accent);font-size:1.6rem\'></i>'"></span>
+          <span class="logo-text">Kiosco</span>
+        </a>
+        <div class="header-actions">
+          <button class="btn-icon" id="themeToggleBtn" title="Cambiar tema">
+            <i class="bi bi-sun-fill" id="themeIcon"></i>
+          </button>
+          <button class="btn-icon d-lg-none" id="sidebarToggleBtn" title="Categorías">
+            <i class="bi bi-list"></i>
+          </button>
+          <button class="btn-icon cart-badge-wrap d-lg-none" id="cartMobileBtn" title="Carrito">
+            <i class="bi bi-cart3"></i>
+            <span class="cart-count" style="display:none">0</span>
+          </button>
+          <button class="btn-icon" id="profileBtn" title="Perfil / Acceso">
+            <i class="bi bi-person-circle"></i>
+          </button>
+          <button class="btn btn-sm d-none d-md-inline-flex align-items-center gap-1" id="installPwaBtn"
+            style="background:rgba(var(--accent-rgb),.15);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:.8rem;padding:.35rem .75rem">
+            <i class="bi bi-download"></i> Instalar
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Store layout -->
+    <div class="store-layout flex-grow-1">
+
+      <!-- Sidebar categorías (desktop) -->
+      <aside class="store-sidebar" id="storeSidebar">
+        <div class="sidebar-label">Categorías</div>
+        <ul class="nav flex-column" id="categoryList"></ul>
+      </aside>
+
+      <!-- Products main -->
+      <main class="products-main">
+        <div class="products-header">
+          <h2 id="currentCatTitle">Todos los productos</h2>
+          <div class="search-wrap">
+            <i class="bi bi-search text-muted"></i>
+            <input type="search" id="searchInput" placeholder="Buscar productos…" autocomplete="off" />
+          </div>
+        </div>
+        <div class="row row-cols-2 row-cols-sm-2 row-cols-md-3 row-cols-xl-4 g-3" id="productsGrid">
+          <div id="productsLoading" class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-3 text-muted small">Cargando productos…</p>
+          </div>
+        </div>
+      </main>
+
+      <!-- Cart sidebar (desktop) -->
+      <aside class="cart-sidebar d-none d-lg-flex flex-column">
+        <div class="cart-header">
+          <h5><i class="bi bi-cart3 me-2"></i>Mi Pedido</h5>
+          <button class="btn btn-link btn-sm text-muted p-0 text-decoration-none" id="clearCartBtn">Limpiar</button>
+        </div>
+        <div class="cart-body">
+          <div id="cartEmpty" class="text-center py-4 text-muted">
+            <i class="bi bi-cart-x display-5 d-block mb-2"></i>
+            <small>Tu carrito está vacío</small>
+          </div>
+          <div id="cartItemsList"></div>
+        </div>
+        <div class="cart-footer-panel" id="cartFooter" style="display:none">
+          <div class="cart-total-row">
+            <span>Total</span>
+            <span id="cartTotal">S/ 0.00</span>
+          </div>
+          <button class="btn btn-primary w-100 mb-2" id="sendOrderBtn">
+            <i class="bi bi-send me-2"></i>Enviar Pedido
+          </button>
+          <button class="btn btn-outline-success w-100" id="shareWhatsappBtn">
+            <i class="bi bi-whatsapp me-2"></i>Compartir por WhatsApp
+          </button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+     PÁGINA: ADMIN
+══════════════════════════════════════════════ -->
+  <div id="page-admin" class="page-view">
+
+    <!-- Admin header -->
+    <header class="site-header">
+      <div class="header-inner">
+        <a href="#" class="logo-wrap">
+          <span class="logo-icon"><img src="icons/icon-96.png"
+              style="width:32px;height:32px;border-radius:8px;object-fit:cover" alt="logo"
+              onerror="this.outerHTML='<i class=\'bi bi-bag-fill\' style=\'color:var(--accent);font-size:1.6rem\'></i>'"></span>
+          <span class="logo-text">Kiosco</span>
+          <span class="badge ms-2"
+            style="background:rgba(var(--accent-rgb),.15);color:var(--accent);font-size:.65rem">Admin</span>
+        </a>
+        <div class="header-actions">
+          <button class="btn-icon" id="themeToggleBtn2" title="Cambiar tema">
+            <i class="bi bi-sun-fill"></i>
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" id="backToStoreBtn">
+            <i class="bi bi-shop me-1"></i>Tienda
+          </button>
+          <button class="btn btn-outline-danger btn-sm" id="logoutAdminBtn">
+            <i class="bi bi-box-arrow-right me-1"></i>Salir
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="admin-layout flex-grow-1">
+
+      <!-- Admin sidebar -->
+      <nav class="admin-sidebar d-none d-lg-flex flex-column">
+        <div class="sidebar-section-label">Principal</div>
+        <a class="nav-link active" data-admin-section="dashboard" href="#">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+        <a class="nav-link" data-admin-section="orders" href="#">
+          <i class="bi bi-receipt"></i> Pedidos
+        </a>
+        <div class="sidebar-section-label">Catálogo</div>
+        <a class="nav-link" data-admin-section="products" href="#">
+          <i class="bi bi-box-seam"></i> Productos
+        </a>
+        <a class="nav-link" data-admin-section="categories" href="#">
+          <i class="bi bi-tags"></i> Categorías
+        </a>
+        <div class="sidebar-section-label">Gestión</div>
+        <a class="nav-link" data-admin-section="caja" href="#">
+          <i class="bi bi-cash-coin"></i> Caja
+        </a>
+        <a class="nav-link" data-admin-section="horario" href="#">
+          <i class="bi bi-clock"></i> Horario
+        </a>
+        <a class="nav-link" data-admin-section="personal" href="#">
+          <i class="bi bi-people"></i> Personal
+        </a>
+        <a class="nav-link" data-admin-section="apariencia" href="#">
+          <i class="bi bi-palette"></i> Apariencia
+        </a>
+        <div class="mt-auto p-3">
+          <button class="btn btn-outline-danger btn-sm w-100" id="logoutAdminBtn2">
+            <i class="bi bi-box-arrow-right me-2"></i>Cerrar sesión
+          </button>
+        </div>
+      </nav>
+
+      <!-- Admin content -->
+      <main class="admin-main">
+        <div class="admin-content">
+
+          <!-- ── DASHBOARD ── -->
+          <div class="admin-section active" id="sec-dashboard">
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+              <h2 class="section-title mb-0"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h2>
+              <div class="btn-group" role="group">
+                <button class="btn btn-primary btn-sm active" data-dash-period="day">Hoy</button>
+                <button class="btn btn-outline-secondary btn-sm" data-dash-period="week">Semana</button>
+                <button class="btn btn-outline-secondary btn-sm" data-dash-period="month">Mes</button>
+              </div>
+            </div>
+
+            <!-- Stat cards -->
+            <div class="row g-3 mb-4">
+              <div class="col-6 col-lg-3">
+                <div class="stat-card card">
+                  <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-cash-stack"></i></div>
+                  <div>
+                    <div class="stat-value" id="dashRevenue">S/ 0.00</div>
+                    <div class="stat-label">Ingresos</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3">
+                <div class="stat-card card">
+                  <div class="stat-icon bg-primary bg-opacity-10" style="color:var(--accent)"><i
+                      class="bi bi-bag-check"></i></div>
+                  <div>
+                    <div class="stat-value" id="dashOrders">0</div>
+                    <div class="stat-label">Pedidos</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3">
+                <div class="stat-card card">
+                  <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle"></i></div>
+                  <div>
+                    <div class="stat-value" id="dashDone">0</div>
+                    <div class="stat-label">Completados</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-lg-3">
+                <div class="stat-card card">
+                  <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-exclamation-circle"></i>
+                  </div>
+                  <div>
+                    <div class="stat-value" id="dashPending">0</div>
+                    <div class="stat-label">Pendientes</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="row g-3 mb-4">
+              <div class="col-lg-7">
+                <div class="card chart-card">
+                  <div class="chart-title"><i class="bi bi-bar-chart me-2"></i>Ventas</div>
+                  <canvas id="salesChart"></canvas>
+                </div>
+              </div>
+              <div class="col-lg-5">
+                <div class="card chart-card">
+                  <div class="chart-title"><i class="bi bi-graph-up me-2"></i>Pedidos</div>
+                  <canvas id="ordersChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Low stock + Excel -->
+            <div class="row g-3">
+              <div class="col-lg-5">
+                <div class="card">
+                  <div class="card-header d-flex align-items-center justify-content-between">
+                    <span class="fw-semibold small"><i class="bi bi-exclamation-triangle me-2 text-warning"></i>Stock
+                      Bajo <span class="badge bg-danger ms-1" id="dashLowStock">0</span></span>
+                  </div>
+                  <ul class="list-group list-group-flush" id="lowStockList"></ul>
+                </div>
+              </div>
+              <div class="col-lg-7">
+                <div class="card">
+                  <div class="card-header fw-semibold small"><i
+                      class="bi bi-file-earmark-excel me-2 text-success"></i>Exportar Excel</div>
+                  <div class="card-body d-flex gap-2 flex-wrap">
+                    <button class="btn btn-outline-success btn-sm" id="dlDay"><i
+                        class="bi bi-download me-1"></i>Hoy</button>
+                    <button class="btn btn-outline-success btn-sm" id="dlWeek"><i
+                        class="bi bi-download me-1"></i>Semana</button>
+                    <button class="btn btn-outline-success btn-sm" id="dlMonth"><i
+                        class="bi bi-download me-1"></i>Mes</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── PEDIDOS ── -->
+          <div class="admin-section" id="sec-orders">
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+              <h2 class="section-title mb-0"><i class="bi bi-receipt me-2"></i>Pedidos</h2>
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-primary active" data-orders-filter="all">Todos</button>
+                <button class="btn btn-outline-warning" data-orders-filter="pending">Pendientes</button>
+                <button class="btn btn-outline-success" data-orders-filter="done">Completados</button>
+                <button class="btn btn-outline-danger" data-orders-filter="rejected">Rechazados</button>
+              </div>
+            </div>
+            <div class="row g-3" id="ordersContainer"></div>
+          </div>
+
+          <!-- ── PRODUCTOS ── -->
+          <div class="admin-section" id="sec-products">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+              <h2 class="section-title mb-0"><i class="bi bi-box-seam me-2"></i>Productos</h2>
+              <button class="btn btn-primary btn-sm" id="btnAddProduct">
+                <i class="bi bi-plus-lg me-1"></i>Nuevo Producto
+              </button>
+            </div>
+            <div class="row g-3" id="adminProductsGrid"></div>
+          </div>
+
+          <!-- ── CATEGORÍAS ── -->
+          <div class="admin-section" id="sec-categories">
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+              <h2 class="section-title mb-0"><i class="bi bi-tags me-2"></i>Categorías</h2>
+              <div class="d-flex gap-2">
+                <button class="btn btn-primary btn-sm" id="btnAddCat"><i
+                    class="bi bi-plus-lg me-1"></i>Categoría</button>
+                <button class="btn btn-outline-primary btn-sm" id="btnAddSubcat"><i
+                    class="bi bi-plus-lg me-1"></i>Subcategoría</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                  <thead class="table-dark">
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Emoji</th>
+                      <th>Subcategorías</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="categoriesTable"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── CAJA ── -->
+          <div class="admin-section" id="sec-caja">
+            <h2 class="section-title"><i class="bi bi-cash-coin me-2"></i>Caja Diaria</h2>
+            <div id="cajaContent"></div>
+          </div>
+
+          <!-- ── HORARIO ── -->
+          <div class="admin-section" id="sec-horario">
+            <h2 class="section-title"><i class="bi bi-clock me-2"></i>Horario de Atención</h2>
+            <div class="card">
+              <div class="card-body" id="scheduleContent"></div>
+            </div>
+          </div>
+
+          <!-- ── PERSONAL ── -->
+          <div class="admin-section" id="sec-personal">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+              <h2 class="section-title mb-0"><i class="bi bi-people me-2"></i>Personal</h2>
+              <button class="btn btn-primary btn-sm" id="btnAddStaff"><i
+                  class="bi bi-person-plus me-1"></i>Agregar</button>
+            </div>
+            <div class="card">
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                  <thead class="table-dark">
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Teléfono</th>
+                      <th>Rol</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="staffTable"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── APARIENCIA ── -->
+          <div class="admin-section" id="sec-apariencia">
+            <h2 class="section-title"><i class="bi bi-palette me-2"></i>Apariencia</h2>
+            <div class="card">
+              <div class="card-body">
+                <form id="brandingForm">
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold">Nombre de la tienda</label>
+                      <input type="text" class="form-control" id="brandName" placeholder="Mi Kiosco" />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label fw-semibold">Emoji / Ícono</label>
+                      <input type="text" class="form-control" id="brandEmoji" placeholder="🛍️" maxlength="4" />
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label fw-semibold">Color principal</label>
+                      <input type="color" class="form-control form-control-color w-100" id="brandColor"
+                        value="#f97316" />
+                    </div>
+                    <div class="col-md-8">
+                      <label class="form-label fw-semibold">URL del logo</label>
+                      <input type="url" class="form-control" id="brandLogoUrl" placeholder="https://…" />
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label fw-semibold">ETA entrega (min)</label>
+                      <input type="number" class="form-control" id="brandEta" placeholder="30" min="1" max="180" />
+                    </div>
+                    <div class="col-12">
+                      <button type="submit" class="btn btn-primary"><i class="bi bi-save me-2"></i>Guardar
+                        apariencia</button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+     MODALES
+══════════════════════════════════ -->
+
+  <!-- Auth Modal -->
+  <div class="modal fade" id="authModal" tabindex="-1" aria-label="Acceso">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold"><i class="bi bi-bag-fill me-2" style="color:var(--accent)"></i>Bienvenido a
+            Kiosco</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-3">
+          <!-- Role selector cards -->
+          <div class="row g-3 mb-4" id="roleCards">
+            <div class="col-6">
+              <div class="role-card selected" id="tabClient">
+                <div class="role-icon"><i class="bi bi-person-circle"></i></div>
+                <div class="role-label">Soy Cliente</div>
+                <div class="role-desc">Comprar y hacer pedidos</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="role-card" id="tabAdmin">
+                <div class="role-icon"><i class="bi bi-shield-lock"></i></div>
+                <div class="role-label">Administrador</div>
+                <div class="role-desc">Gestionar la tienda</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Client panel -->
+          <div id="panelClient">
+            <form id="clientLoginForm">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Tu nombre <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="clientName" placeholder="Ej: Jhonn Pether" required
+                  autocomplete="name" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Teléfono <span class="text-muted small">(opcional)</span></label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-telephone me-1"></i>+51</span>
+                  <input type="tel" class="form-control" id="clientPhone" placeholder="9XX XXX XXX" maxlength="9" />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary w-100">
+                <i class="bi bi-arrow-right-circle me-2"></i>Entrar a la tienda
+              </button>
+            </form>
+          </div>
+
+          <!-- Admin panel -->
+          <div id="panelAdmin" style="display:none">
+            <!-- Step 1: phone -->
+            <div id="step1Admin">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Número de teléfono</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-telephone me-1"></i>+51</span>
+                  <input type="tel" class="form-control" id="adminPhone" placeholder="9XX XXX XXX" maxlength="9" />
+                </div>
+              </div>
+              <div id="recaptchaContainer"></div>
+              <button class="btn btn-primary w-100" id="sendCodeBtn">
+                <i class="bi bi-send me-2"></i>Enviar código
+              </button>
+            </div>
+            <!-- Step 2: code -->
+            <div id="step2Admin" style="display:none">
+              <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Código enviado a tu número</p>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Código de verificación</label>
+                <input type="text" class="form-control form-control-lg text-center fw-bold" id="adminCode"
+                  placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" />
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary flex-shrink-0" id="backToStep1">
+                  <i class="bi bi-arrow-left"></i>
+                </button>
+                <button class="btn btn-primary flex-grow-1" id="verifyCodeBtn">
+                  <i class="bi bi-shield-check me-2"></i>Verificar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile Modal -->
+  <div class="modal fade" id="profileModal" tabindex="-1" aria-label="Mi Perfil">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold"><i class="bi bi-person-circle me-2" style="color:var(--accent)"></i>Mi Perfil
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Tabs -->
+          <div class="d-flex gap-2 mb-4">
+            <button class="btn btn-primary btn-sm active" data-profile-tab="info">
+              <i class="bi bi-person me-1"></i>Mis datos
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" data-profile-tab="orders">
+              <i class="bi bi-bag me-1"></i>Mis pedidos
+            </button>
+          </div>
+          <!-- Info -->
+          <div id="profilePane-info" class="profile-pane active" style="display:block">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Nombre</label>
+              <input type="text" class="form-control" id="profileName" placeholder="Tu nombre" />
+            </div>
+            <div class="mb-4">
+              <label class="form-label fw-semibold">Teléfono</label>
+              <div class="input-group">
+                <span class="input-group-text">+51</span>
+                <input type="tel" class="form-control" id="profilePhone" placeholder="9XX XXX XXX" maxlength="9" />
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary flex-grow-1" id="saveProfileBtn">
+                <i class="bi bi-save me-2"></i>Guardar
+              </button>
+              <button class="btn btn-outline-danger" id="logoutClientBtn">
+                <i class="bi bi-box-arrow-right me-1"></i>Salir
+              </button>
+            </div>
+          </div>
+          <!-- Orders -->
+          <div id="profilePane-orders" class="profile-pane" style="display:none">
+            <div id="profileOrdersList">
+              <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Modal -->
+  <div class="modal fade" id="orderModal" tabindex="-1" aria-label="Confirmar Pedido">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-bold"><i class="bi bi-bag-check me-2" style="color:var(--accent)"></i>Confirmar
+            Pedido</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-4">
+            <div class="col-md-6">
+              <h6 class="fw-bold mb-3">Resumen</h6>
+              <div id="orderSummary" class="border rounded p-3 mb-3 small"></div>
+              <h6 class="fw-bold mb-3">Datos de entrega</h6>
+              <div class="mb-3">
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="deliveryType" id="dtPickup" value="pickup"
+                    checked />
+                  <label class="form-check-label" for="dtPickup"><i class="bi bi-shop me-1"></i>Recoger en
+                    tienda</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="deliveryType" id="dtDelivery" value="delivery" />
+                  <label class="form-check-label" for="dtDelivery"><i class="bi bi-truck me-1"></i>Delivery</label>
+                </div>
+              </div>
+              <div id="addressRow" style="display:none" class="mb-3">
+                <label class="form-label fw-semibold small">Dirección</label>
+                <input type="text" class="form-control form-control-sm" id="orderAddress"
+                  placeholder="Calle, número, referencia…" />
+                <button class="btn btn-outline-info btn-sm mt-2 w-100" id="useGpsBtn">
+                  <i class="bi bi-geo-alt me-1"></i>Usar mi ubicación GPS
+                </button>
+                <div id="gpsStatus" class="mt-1 small text-muted"></div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <h6 class="fw-bold mb-3">Tus datos</h6>
+              <div class="mb-3">
+                <label class="form-label fw-semibold small">Nombre <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" id="orderCustomerName"
+                  placeholder="Tu nombre" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold small">Teléfono</label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">+51</span>
+                  <input type="tel" class="form-control" id="orderCustomerPhone" placeholder="9XX XXX XXX"
+                    maxlength="9" />
+                </div>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-7">
+                  <label class="form-label fw-semibold small">Fecha</label>
+                  <input type="date" class="form-control form-control-sm" id="orderDate" />
+                </div>
+                <div class="col-5">
+                  <label class="form-label fw-semibold small">Hora</label>
+                  <input type="time" class="form-control form-control-sm" id="orderTime" />
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold small">Notas</label>
+                <textarea class="form-control form-control-sm" id="orderNotes" rows="2"
+                  placeholder="Sin cebolla, extra salsa…"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary px-4" id="confirmOrderBtn">
+            <i class="bi bi-send me-2"></i>Confirmar Pedido
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Modal -->
+  <div class="modal fade" id="productModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-bold" id="productModalTitle">Nuevo Producto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="productForm">
+            <input type="hidden" id="productId" />
+            <div class="row g-3">
+              <div class="col-md-8">
+                <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="productName" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Precio <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <span class="input-group-text">S/</span>
+                  <input type="number" class="form-control" id="productPrice" step="0.10" min="0" required />
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Descripción</label>
+                <textarea class="form-control" id="productDesc" rows="2"></textarea>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Categoría</label>
+                <select class="form-select" id="productCategory">
+                  <option value="">Sin categoría</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Subcategoría</label>
+                <select class="form-select" id="productSubcat">
+                  <option value="">Sin subcategoría</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Stock</label>
+                <input type="number" class="form-control" id="productStock" min="0" placeholder="∞ ilimitado" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Emoji</label>
+                <input type="text" class="form-control" id="productEmoji" placeholder="🛍️" maxlength="4" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Estado</label>
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input" type="checkbox" id="productActive" checked />
+                  <label class="form-check-label" for="productActive">Activo</label>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">URL de imagen</label>
+                <input type="url" class="form-control" id="productImageUrl" placeholder="https://…" />
+                <img id="productImgPreview" src="" class="mt-2 rounded"
+                  style="max-height:120px;object-fit:cover;display:block" onerror="this.style.display='none'"
+                  onload="this.style.display='block'" />
+              </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+              <button type="submit" class="btn btn-primary"><i class="bi bi-save me-2"></i>Guardar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Modal -->
+  <div class="modal fade" id="catModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-bold" id="catModalTitle">Nueva Categoría</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="catForm">
+            <input type="hidden" id="catId" />
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="catName" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Emoji</label>
+              <input type="text" class="form-control" id="catEmoji" placeholder="📦" maxlength="4" />
+            </div>
+            <div class="mb-4">
+              <label class="form-label fw-semibold">Categoría padre (opcional)</label>
+              <select class="form-select" id="catParent">
+                <option value="">— Principal —</option>
+              </select>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+              <button type="submit" class="btn btn-primary"><i class="bi bi-save me-2"></i>Guardar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Modal -->
+  <div class="modal fade" id="staffModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-bold">Agregar Personal</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="staffForm">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Nombre</label>
+              <input type="text" class="form-control" id="staffName" placeholder="Nombre completo" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Teléfono <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text">+51</span>
+                <input type="tel" class="form-control" id="staffPhone" placeholder="9XX XXX XXX" maxlength="9"
+                  required />
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="form-label fw-semibold">Rol</label>
+              <select class="form-select" id="staffRole">
+                <option value="employee">Empleado</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+              <button type="submit" class="btn btn-primary"><i class="bi bi-person-plus me-2"></i>Agregar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cart Offcanvas (mobile) -->
+  <div class="offcanvas offcanvas-end" id="cartOffcanvas" tabindex="-1" aria-label="Carrito">
+    <div class="offcanvas-header border-bottom">
+      <h5 class="offcanvas-title fw-bold"><i class="bi bi-cart3 me-2"></i>Mi Pedido</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body p-0 d-flex flex-column">
+      <div class="flex-grow-1 p-3 overflow-auto">
+        <div id="cartEmptyMobile" class="text-center py-5 text-muted">
+          <i class="bi bi-cart-x display-4 d-block mb-2"></i>
+          <small>Tu carrito está vacío</small>
+        </div>
+        <div id="cartItemsListMobile"></div>
+      </div>
+      <div class="p-3 border-top">
+        <div class="d-flex justify-content-between fw-bold mb-3">
+          <span>Total</span><span id="cartTotalMobile">S/ 0.00</span>
+        </div>
+        <button class="btn btn-primary w-100 mb-2" id="sendOrderBtnMobile">
+          <i class="bi bi-send me-2"></i>Enviar Pedido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- ── Scripts ── -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-</head>
-
-<body class="theme-dark">
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       HEADER
-  ══════════════════════════════════════════════════════════════════════════ -->
-  <header class="site-header" id="siteHeader">
-    <div class="header-inner">
-      <div class="logo-wrap">
-        <span class="logo-icon">🛍️</span>
-        <span class="logo-text">Kiosco</span>
-      </div>
-      <div class="header-actions">
-        <button class="btn-icon theme-toggle" id="themeToggle" title="Cambiar tema" aria-label="Cambiar tema">
-          <span class="theme-icon">☀️</span>
-        </button>
-        <!-- Carrito solo en móvil -->
-        <button class="btn-icon cart-btn mobile-only" id="cartBtnMobile" aria-label="Ver carrito">
-          🛒 <span class="cart-badge" id="cartBadge">0</span>
-        </button>
-        <!-- Perfil/Login -->
-        <button class="btn-icon" id="profileBtn" aria-label="Mi perfil" title="Mi perfil">👤</button>
-        <!-- Admin (oculto hasta login) -->
-        <button class="btn-icon" id="loginBtn" aria-label="Acceso" title="Acceso" style="display:none">👥</button>
-      </div>
-    </div>
-  </header>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       TIENDA (público)
-  ══════════════════════════════════════════════════════════════════════════ -->
-  <main id="pageStore" class="page active">
-    <!-- Banner cerrado -->
-    <div id="storeClosedBanner" style="display:none" class="store-closed-banner"></div>
-    <!-- Banner ETA -->
-    <div id="etaBanner"
-      style="display:none;padding:.5rem 1.25rem;text-align:center;background:var(--bg-2);border-bottom:1px solid var(--border)">
-    </div>
-
-    <div class="store-layout">
-      <!-- Categorías -->
-      <aside class="category-sidebar">
-        <p class="sidebar-title">Categorías</p>
-        <ul class="category-list" id="categoryList"></ul>
-      </aside>
-
-      <!-- Productos -->
-      <section class="products-section">
-        <!-- Destacados -->
-        <div id="featuredSection" style="display:none">
-          <p class="featured-title">⭐ Destacados</p>
-          <div class="featured-grid" id="featuredGrid"></div>
-          <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0" />
-        </div>
-        <div class="products-header">
-          <h1 class="section-title" id="currentCategoryTitle">Todos los productos</h1>
-          <div class="search-bar">
-            <span class="search-icon">🔍</span>
-            <input type="search" id="searchInput" placeholder="Buscar productos…" aria-label="Buscar" />
-          </div>
-        </div>
-        <div class="products-grid" id="productsGrid">
-          <div id="productsLoading" class="loading-pulse"
-            style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1rem">
-            <div class="pulse-card"></div>
-            <div class="pulse-card"></div>
-            <div class="pulse-card"></div>
-            <div class="pulse-card"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Carrito desktop -->
-      <aside class="cart-sidebar desktop-only">
-        <div class="cart-header">
-          <h2>🛒 Mi Pedido</h2>
-          <button class="btn-clear" id="clearCartBtn">Limpiar</button>
-        </div>
-        <div class="cart-items" id="cartItems">
-          <p class="cart-empty">Tu carrito está vacío</p>
-        </div>
-        <div class="cart-footer" id="cartFooter" style="display:none">
-          <div class="cart-total">
-            <span>Total:</span>
-            <strong id="cartTotal">S/ 0.00</strong>
-          </div>
-          <button class="btn-primary btn-block" id="sendOrderBtn"> Enviar Pedido</button>
-          <button class="btn-outline btn-block" id="shareWhatsappBtn">💬 WhatsApp</button>
-        </div>
-      </aside>
-    </div>
-  </main>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       ADMIN
-  ══════════════════════════════════════════════════════════════════════════ -->
-  <main id="pageAdmin" class="page">
-    <div class="admin-layout">
-
-      <!-- Sidebar admin -->
-      <nav class="admin-sidebar">
-        <ul>
-          <li>
-            <button class="admin-nav-btn" id="backToStoreBtn"
-              style="color:var(--info);border-bottom:1px solid var(--border);width:100%;text-align:left;margin-bottom:.5rem;padding-bottom:.75rem">
-              ← Volver a la tienda
-            </button>
-          </li>
-          <li><button class="admin-nav-btn active" data-section="dashboard"> Dashboard</button></li>
-          <li><button class="admin-nav-btn" data-section="orders"> Pedidos</button></li>
-          <li><button class="admin-nav-btn" data-section="products"> Productos</button></li>
-          <li><button class="admin-nav-btn" data-section="categories"> Categorías</button></li>
-          <li><button class="admin-nav-btn" data-section="cashregister"> Caja</button></li>
-          <li><button class="admin-nav-btn" data-section="schedule"> Horario</button></li>
-          <li><button class="admin-nav-btn" data-section="staff"> Personal</button></li>
-          <li><button class="admin-nav-btn" data-section="branding"> Apariencia</button></li>
-          <li style="margin-top:auto;padding-top:.75rem;border-top:1px solid var(--border)">
-            <button class="admin-nav-btn" id="logoutBtn" style="color:var(--danger)">🚪 Cerrar sesión</button>
-          </li>
-        </ul>
-      </nav>
-
-      <!-- Contenido admin -->
-      <div class="admin-content" id="adminContent">
-
-        <!-- DASHBOARD -->
-        <section class="admin-section active" id="sectionDashboard">
-          <div class="section-header">
-            <h2>📊 Dashboard</h2>
-            <div class="period-tabs">
-              <button class="period-tab active" data-period="day">Hoy</button>
-              <button class="period-tab" data-period="week">Semana</button>
-              <button class="period-tab" data-period="month">Mes</button>
-            </div>
-          </div>
-          <div class="stats-grid" id="statsGrid">
-            <div class="stat-card animate-in">
-              <span class="stat-icon">💰</span>
-              <div class="stat-info"><span class="stat-value" id="statRevenue">S/ 0.00</span><span
-                  class="stat-label">Ingresos</span></div>
-            </div>
-            <div class="stat-card animate-in" style="animation-delay:.08s">
-              <span class="stat-icon">📦</span>
-              <div class="stat-info"><span class="stat-value" id="statOrders">0</span><span
-                  class="stat-label">Pedidos</span></div>
-            </div>
-            <div class="stat-card animate-in" style="animation-delay:.16s">
-              <span class="stat-icon">✅</span>
-              <div class="stat-info"><span class="stat-value" id="statDone">0</span><span
-                  class="stat-label">Completados</span></div>
-            </div>
-            <div class="stat-card animate-in" style="animation-delay:.24s">
-              <span class="stat-icon">⏳</span>
-              <div class="stat-info"><span class="stat-value" id="statPending">0</span><span
-                  class="stat-label">Pendientes</span></div>
-            </div>
-          </div>
-          <div class="chart-area"><canvas id="salesChart"></canvas></div>
-          <div class="download-bar" style="margin-top:1rem">
-            <span>Descargar reporte:</span>
-            <button class="btn-outline btn-sm" id="downloadDay">Hoy</button>
-            <button class="btn-outline btn-sm" id="downloadWeek">Semana</button>
-            <button class="btn-outline btn-sm" id="downloadMonth">Mes</button>
-            <span style="margin-left:.5rem">Excel:</span>
-            <button class="btn-excel" id="xlsxDay">Hoy</button>
-            <button class="btn-excel" id="xlsxWeek">Semana</button>
-            <button class="btn-excel" id="xlsxMonth">Mes</button>
-          </div>
-        </section>
-
-        <!-- PEDIDOS -->
-        <section class="admin-section" id="sectionOrders">
-          <div class="section-header">
-            <h2>📋 Pedidos en tiempo real</h2>
-            <div class="order-filters">
-              <button class="filter-btn active" data-filter="all">Todos</button>
-              <button class="filter-btn" data-filter="pending">⏳ Pendiente</button>
-              <button class="filter-btn" data-filter="done">✅ Hecho</button>
-              <button class="filter-btn" data-filter="rejected">❌ Rechazado</button>
-            </div>
-          </div>
-          <div class="orders-list" id="ordersList"></div>
-        </section>
-
-        <!-- PRODUCTOS -->
-        <section class="admin-section" id="sectionProducts">
-          <div class="section-header">
-            <h2>🏷️ Productos</h2>
-            <button class="btn-primary" id="addProductBtn">+ Nuevo Producto</button>
-          </div>
-          <div class="admin-products-grid" id="adminProductsGrid"></div>
-        </section>
-
-        <!-- CATEGORÍAS -->
-        <section class="admin-section" id="sectionCategories">
-          <div class="section-header">
-            <h2>📂 Categorías</h2>
-            <div style="display:flex;gap:.5rem">
-              <button class="btn-primary" id="addCategoryBtn">+ Categoría</button>
-              <button class="btn-outline" id="addSubcategoryBtn">+ Subcategoría</button>
-            </div>
-          </div>
-          <div class="categories-manager" id="categoriesManager"></div>
-        </section>
-
-        <!-- CAJA -->
-        <section class="admin-section" id="sectionCashregister">
-          <div class="section-header">
-            <h2>🏦 Caja Diaria</h2>
-          </div>
-          <div id="cashRegisterContainer"></div>
-        </section>
-
-        <!-- HORARIO -->
-        <section class="admin-section" id="sectionSchedule">
-          <div class="section-header">
-            <h2>🕐 Horario de Atención</h2>
-          </div>
-          <div id="scheduleGrid"></div>
-          <button class="btn-primary" id="saveScheduleBtn" style="margin-top:1rem;display:none">💾 Guardar
-            Horario</button>
-        </section>
-
-        <!-- PERSONAL -->
-        <section class="admin-section" id="sectionStaff">
-          <div class="section-header">
-            <h2>👥 Personal</h2>
-            <button class="btn-primary" id="addStaffBtn">+ Agregar empleado</button>
-          </div>
-          <p style="color:var(--text-2);font-size:.85rem;margin-bottom:1rem">
-            Los empleados pueden gestionar pedidos pero no editar productos ni configuración.
-          </p>
-          <div id="staffList"></div>
-        </section>
-
-        <!-- APARIENCIA -->
-        <section class="admin-section" id="sectionBranding">
-          <div class="section-header">
-            <h2>🎨 Apariencia de la Tienda</h2>
-          </div>
-          <div class="modal-form" style="max-width:480px">
-            <div class="form-row">
-              <label>Nombre de la tienda</label>
-              <input type="text" id="brandStoreName" class="input-field" placeholder="Mi Kiosco" />
-            </div>
-            <div class="form-row">
-              <label>Emoji / Ícono del logo</label>
-              <input type="text" id="brandLogoEmoji" class="input-field" placeholder="🛍️" maxlength="4" />
-            </div>
-            <div class="form-row">
-              <label>Color principal</label>
-              <div id="colorPreview"
-                style="width:100%;height:44px;border-radius:var(--radius-sm);background:var(--accent);margin-bottom:.5rem;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:.9rem">
-                Vista previa</div>
-              <div class="color-grid" style="margin-bottom:.75rem">
-                <div class="color-swatch selected" style="background:#f97316" data-color="#f97316" title="Naranja">
-                </div>
-                <div class="color-swatch" style="background:#ef4444" data-color="#ef4444" title="Rojo"></div>
-                <div class="color-swatch" style="background:#a855f7" data-color="#a855f7" title="Morado"></div>
-                <div class="color-swatch" style="background:#06b6d4" data-color="#06b6d4" title="Cyan"></div>
-                <div class="color-swatch" style="background:#22c55e" data-color="#22c55e" title="Verde"></div>
-                <div class="color-swatch" style="background:#ec4899" data-color="#ec4899" title="Rosa"></div>
-                <div class="color-swatch" style="background:#f59e0b" data-color="#f59e0b" title="Amarillo"></div>
-                <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6" title="Azul"></div>
-              </div>
-              <input type="color" id="brandColor" class="input-field" value="#f97316" style="height:44px" />
-            </div>
-            <div class="form-row">
-              <label>⏱️ Tiempo estimado de entrega (minutos)</label>
-              <input type="number" id="brandDeliveryTime" class="input-field" placeholder="30" min="0" />
-            </div>
-            <div class="form-row">
-              <label>💜 Número Yape</label>
-              <input type="tel" id="brandYapeNumber" class="input-field" placeholder="+51 9XX XXX XXX" />
-            </div>
-            <div class="form-row">
-              <label>💚 Número Plin</label>
-              <input type="tel" id="brandPlinNumber" class="input-field" placeholder="+51 9XX XXX XXX" />
-            </div>
-            <button class="btn-primary btn-block" id="saveBrandingBtn">💾 Guardar Apariencia</button>
-          </div>
-        </section>
-
-      </div><!-- /admin-content -->
-    </div><!-- /admin-layout -->
-  </main>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       MODALES
-  ══════════════════════════════════════════════════════════════════════════ -->
-
-  <!-- LOGIN / PERFIL -->
-  <div class="modal-overlay" id="loginModal">
-    <div class="modal-box">
-      <button class="modal-close" id="closeLoginModal">✕</button>
-      <h2 class="modal-title">🛍️ Bienvenido a Kiosco</h2>
-
-      <!-- Tabs -->
-      <div class="login-tabs">
-        <button class="login-tab active" id="loginTabUser">👤 Soy cliente</button>
-        <button class="login-tab" id="loginTabAdmin">👥 Administrador</button>
-      </div>
-
-      <!-- Panel Usuario -->
-      <div id="loginPanelUser">
-        <p class="modal-subtitle">Ingresa tu nombre para hacer pedidos y ver tu historial</p>
-        <div class="modal-form">
-          <div class="form-row">
-            <label>Tu nombre *</label>
-            <input type="text" id="userNameInput" class="input-field" placeholder="Ej: Jhonn Pether"
-              autocomplete="name" />
-          </div>
-          <div class="form-row">
-            <label>Teléfono</label>
-            <div class="phone-input-wrap">
-              <span class="phone-prefix">🇵🇪 +51</span>
-              <input type="tel" id="userPhoneInput" placeholder="9XX XXX XXX" maxlength="9" inputmode="numeric" />
-            </div>
-          </div>
-          <button class="btn-primary btn-block" id="userLoginBtn">Entrar </button>
-        </div>
-      </div>
-
-      <!-- Panel Admin -->
-      <div id="loginPanelAdmin" style="display:none">
-        <p class="modal-subtitle">Acceso exclusivo para administradores</p>
-        <div id="loginStep1">
-          <div class="phone-input-wrap">
-            <span class="phone-prefix">🇵🇪 +51</span>
-            <input type="tel" id="phoneInput" placeholder="9XX XXX XXX" maxlength="9" autocomplete="tel"
-              inputmode="numeric" />
-          </div>
-          <button class="btn-primary btn-block" id="sendCodeBtn" style="margin-top:.75rem">Enviar código </button>
-          <div id="recaptcha-container"></div>
-        </div>
-        <div id="loginStep2" style="display:none">
-          <p style="color:var(--text-2);font-size:.88rem;margin-bottom:1rem">Código enviado a tu número</p>
-          <input type="text" id="codeInput" class="input-field" placeholder="Código de 6 dígitos" maxlength="6"
-            inputmode="numeric" autocomplete="one-time-code" style="margin-bottom:1rem" />
-          <button class="btn-primary btn-block" id="verifyCodeBtn">Verificar ✅</button>
-        </div>
-      </div>
-
-      <p class="login-error" id="loginError"></p>
-    </div>
-  </div>
-
-  <!-- PERFIL DE USUARIO (historial) -->
-  <div class="modal-overlay" id="profileModal">
-    <div class="modal-box" style="max-width:500px">
-      <button class="modal-close" id="closeProfileModal">✕</button>
-      <h2 class="modal-title">👤 Mi Perfil</h2>
-      <div class="login-tabs" style="margin-bottom:1rem">
-        <button class="login-tab active" data-profile-tab="info">Mis datos</button>
-        <button class="login-tab" data-profile-tab="history">📋 Mis pedidos</button>
-      </div>
-      <!-- Info tab -->
-      <div id="profileTabInfo">
-        <div class="modal-form">
-          <div class="form-row">
-            <label>Nombre</label>
-            <input type="text" id="profileNameInput" class="input-field" placeholder="Tu nombre" />
-          </div>
-          <div class="form-row">
-            <label>Teléfono</label>
-            <div class="phone-input-wrap">
-              <span class="phone-prefix">🇵🇪 +51</span>
-              <input type="tel" id="profilePhoneInput" placeholder="9XX XXX XXX" maxlength="9" inputmode="numeric" />
-            </div>
-          </div>
-          <div style="display:flex;gap:.5rem">
-            <button class="btn-primary" id="saveProfileBtn" style="flex:1">💾 Guardar</button>
-            <button class="btn-danger btn-sm" id="logoutUserBtn">Cerrar sesión</button>
-          </div>
-        </div>
-      </div>
-      <!-- History tab -->
-      <div id="profileTabHistory" style="display:none">
-        <div id="profileOrderHistory">
-          <div class="empty-state">
-            <div class="empty-icon">📋</div>
-            <p>Cargando pedidos…</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- PRODUCTO -->
-  <div class="modal-overlay" id="productModal">
-    <div class="modal-box modal-wide">
-      <button class="modal-close" id="closeProductModal">✕</button>
-      <h2 class="modal-title" id="productModalTitle">Nuevo Producto</h2>
-      <form id="productForm" class="modal-form" novalidate>
-        <input type="hidden" id="productId" />
-        <div class="form-row-2">
-          <div class="form-row">
-            <label>Nombre *</label>
-            <input type="text" id="productName" class="input-field" required placeholder="Nombre del producto" />
-          </div>
-          <div class="form-row">
-            <label>Precio (S/) *</label>
-            <input type="number" id="productPrice" class="input-field" step="0.10" min="0" required
-              placeholder="0.00" />
-          </div>
-        </div>
-        <div class="form-row">
-          <label>Descripción</label>
-          <textarea id="productDesc" class="input-field" rows="2" placeholder="Descripción breve"></textarea>
-        </div>
-        <div class="form-row-2">
-          <div class="form-row">
-            <label>Categoría</label>
-            <select id="productCategory" class="input-field">
-              <option value="">Sin categoría</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label>Subcategoría</label>
-            <select id="productSubcategory" class="input-field">
-              <option value="">Sin subcategoría</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row-2">
-          <div class="form-row">
-            <label>Stock (vacío = ilimitado)</label>
-            <input type="number" id="productStock" class="input-field" min="0" placeholder="∞" />
-          </div>
-          <div class="form-row">
-            <label>Emoji (sin imagen)</label>
-            <input type="text" id="productEmoji" class="input-field" placeholder="🍕" maxlength="4" />
-          </div>
-        </div>
-        <div class="form-row">
-          <label>URL de imagen</label>
-          <input type="url" id="productImage" class="input-field" placeholder="https://…" />
-          <img id="productImagePreview" class="img-preview" alt="Vista previa"
-            style="display:none;width:100%;max-height:150px;object-fit:cover;border-radius:var(--radius-sm);margin-top:.5rem" />
-        </div>
-        <div class="form-row">
-          <label class="toggle-label">
-            <input type="checkbox" id="productActive" checked />
-            <span>Producto activo (visible en tienda)</span>
-          </label>
-        </div>
-        <div class="form-row">
-          <label class="toggle-label">
-            <input type="checkbox" id="productFeatured" />
-            <span>⭐ Producto destacado</span>
-          </label>
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn-outline" id="cancelProductBtn">Cancelar</button>
-          <button type="submit" class="btn-primary">💾 Guardar Producto</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- CATEGORÍA -->
-  <div class="modal-overlay" id="categoryModal">
-    <div class="modal-box">
-      <button class="modal-close" id="closeCategoryModal">✕</button>
-      <h2 class="modal-title" id="categoryModalTitle">Nueva Categoría</h2>
-      <form id="categoryForm" class="modal-form" novalidate>
-        <input type="hidden" id="categoryId" />
-        <div class="form-row">
-          <label>Nombre *</label>
-          <input type="text" id="categoryName" class="input-field" required placeholder="Nombre" />
-        </div>
-        <div class="form-row">
-          <label>Emoji</label>
-          <input type="text" id="categoryEmoji" class="input-field" placeholder="📦" maxlength="4" />
-        </div>
-        <div class="form-row">
-          <label>Categoría padre (para subcategoría)</label>
-          <select id="categoryParent" class="input-field">
-            <option value="">— Es categoría principal —</option>
-          </select>
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn-outline" id="cancelCategoryBtn">Cancelar</button>
-          <button type="submit" class="btn-primary">💾 Guardar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- CARRITO MÓVIL -->
-  <div class="modal-overlay" id="cartModal">
-    <div class="modal-box modal-cart">
-      <button class="modal-close" id="closeCartModal">✕</button>
-      <h2 class="modal-title">🛒 Mi Pedido</h2>
-      <div class="cart-items" id="cartItemsMobile">
-        <p class="cart-empty">Tu carrito está vacío</p>
-      </div>
-      <div class="cart-footer" id="cartFooterMobile" style="display:none">
-        <div class="cart-total">
-          <span>Total:</span>
-          <strong id="cartTotalMobile">S/ 0.00</strong>
-        </div>
-        <button class="btn-primary btn-block" id="sendOrderBtnMobile"> Enviar Pedido</button>
-        <button class="btn-outline btn-block" id="shareWhatsappBtnMobile">💬 WhatsApp</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- EMPLEADO -->
-  <div class="modal-overlay" id="staffModal">
-    <div class="modal-box">
-      <button class="modal-close" id="closeStaffModal">✕</button>
-      <h2 class="modal-title">➕ Agregar Empleado</h2>
-      <div class="modal-form">
-        <div class="form-row">
-          <label>Nombre completo</label>
-          <input type="text" id="staffName" class="input-field" placeholder="Ej: María García" />
-        </div>
-        <div class="form-row">
-          <label>Teléfono *</label>
-          <div class="phone-input-wrap">
-            <span class="phone-prefix">🇵🇪 +51</span>
-            <input type="tel" id="staffPhone" placeholder="9XX XXX XXX" maxlength="9" inputmode="numeric" />
-          </div>
-        </div>
-        <div class="form-row">
-          <label>Rol</label>
-          <select id="staffRole" class="input-field">
-            <option value="employee">🧑‍💼 Empleado</option>
-            <option value="admin"> Admin</option>
-          </select>
-        </div>
-        <div class="form-actions">
-          <button class="btn-outline" id="cancelStaffBtn">Cancelar</button>
-          <button class="btn-primary" id="saveStaffBtn">💾 Guardar</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- TOASTS -->
-  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
-
-  <!-- ══════════════════════════════════════════════════════════════════════
-       SCRIPTS — orden correcto, sin duplicados
-  ══════════════════════════════════════════════════════════════════════════ -->
-
-<script src="js/config.js"></script>
-<script src="js/firebase.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/store.js"></script>
-<script src="js/cart.js"></script>
-<script src="js/admin.js"></script>
-<script src="js/dashboard.js"></script>
-<script src="js/orders.js"></script>
-<script src="js/notifications.js"></script>
-<script src="js/share.js"></script>
-<script src="js/ui-helpers.js"></script>
-<script src="js/app.js"></script>
-
+  <script src="js/config.js"></script>
+  <script src="js/firebase.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/orders.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/app.js"></script>
   <script>
-    if ('serviceWorker' in navigator)
-      navigator.serviceWorker.register('sw.js').catch(() => { });
+    // Mobile cart button
+    document.getElementById('cartMobileBtn')?.addEventListener('click', () => {
+      new bootstrap.Offcanvas(document.getElementById('cartOffcanvas')).show();
+    });
+    // Second theme toggle (admin header)
+    document.getElementById('themeToggleBtn2')?.addEventListener('click', () => {
+      const next = document.body.dataset.bsTheme === 'dark' ? 'light' : 'dark';
+      document.body.dataset.bsTheme = next;
+      localStorage.setItem('kk_theme', next);
+    });
+    // Second logout btn
+    document.getElementById('logoutAdminBtn2')?.addEventListener('click', () => {
+      Auth.logout().then(() => { App.showPage('store'); showToast('Sesión cerrada', 'info'); });
+    });
+    // Sync cart to offcanvas
+    const origRender = Cart.render.bind(Cart);
+    Cart.render = function () {
+      origRender();
+      // Sync totals to mobile offcanvas
+      const mob = document.getElementById('cartTotalMobile');
+      const tot = document.getElementById('cartTotal');
+      if (mob && tot) mob.textContent = tot.textContent;
+      const mobList = document.getElementById('cartItemsListMobile');
+      const desList = document.getElementById('cartItemsList');
+      if (mobList && desList) mobList.innerHTML = desList.innerHTML;
+      const mobEmpty = document.getElementById('cartEmptyMobile');
+      const desEmpty = document.getElementById('cartEmpty');
+      if (mobEmpty && desEmpty) mobEmpty.style.display = desEmpty.style.display;
+    };
   </script>
 </body>
 

@@ -1,160 +1,162 @@
-// js/store.js — Public store, real-time
+// js/store.js — Public store with real-time Firestore (no composite indexes)
 const Store = (() => {
-  let categories = [];
-  let products   = [];
-  let activeCat  = null;
-  let activeSub  = null;
-  let query      = '';
-  let unsubP = null, unsubC = null;
+  let cats = [], prods = [], activeCat = null, activeSub = null, q = '';
+  let unsubC = null, unsubP = null;
 
   function init() {
-    subCategories();
-    subProducts();
+    subCats();
+    subProds();
     document.getElementById('searchInput')?.addEventListener('input', e => {
-      query = e.target.value.trim();
-      renderProducts();
+      q = e.target.value.trim();
+      renderProds();
     });
   }
 
-  function subCategories() {
+  function subCats() {
     if (unsubC) unsubC();
-    unsubC = db.collection(COLL.categories).orderBy('name').onSnapshot(snap => {
-      categories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderCategories();
-    });
+    // No orderBy — sort in JS to avoid composite index
+    unsubC = db.collection(COLL.categories).onSnapshot(snap => {
+      cats = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+      renderCats();
+    }, err => console.warn('cats:', err.code));
   }
 
-  function subProducts() {
+  function subProds() {
     if (unsubP) unsubP();
-    unsubP = db.collection(COLL.products)
-      .where('active','==',true).orderBy('name')
-      .onSnapshot(snap => {
-        products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderProducts();
-      });
+    // Single where — no composite index needed
+    unsubP = db.collection(COLL.products).where('active', '==', true).onSnapshot(snap => {
+      prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+      renderProds();
+    }, err => {
+      console.warn('prods:', err.code, err.message);
+      const g = document.getElementById('productsGrid');
+      if (g) g.innerHTML = `<div class="col-12 text-center py-5"><p class="text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error al cargar productos: ${err.code}</p></div>`;
+    });
   }
 
-  function renderCategories() {
-    const list   = document.getElementById('categoryList');
-    const mains  = categories.filter(c => !c.parentId);
-    const subs   = categories.filter(c =>  c.parentId);
-
-    let html = `<li><button class="category-btn ${!activeCat?'active':''}" data-cat="">
-      🏠 Todos</button></li>`;
-
-    mains.forEach(cat => {
-      const children = subs.filter(s => s.parentId === cat.id);
-      html += `<li>
-        <button class="category-btn ${activeCat===cat.id?'active':''}" data-cat="${cat.id}">
-          ${cat.emoji||'📦'} ${cat.name}</button>`;
-      if (children.length) {
-        html += `<ul class="subcategory-list">`;
-        children.forEach(s => {
-          html += `<li><button class="subcategory-btn ${activeSub===s.id?'active':''}"
-            data-subcat="${s.id}" data-parent="${s.parentId}">
-            ${s.emoji||'›'} ${s.name}</button></li>`;
+  function renderCats() {
+    const el = document.getElementById('categoryList');
+    if (!el) return;
+    const mains = cats.filter(c => !c.parentId);
+    const subs = cats.filter(c => c.parentId);
+    let h = `<li class="nav-item">
+      <a class="nav-link cat-link ${!activeCat ? 'active' : ''}" data-cat="" href="#">
+        <i class="bi bi-grid-fill me-2"></i>Todos
+      </a></li>`;
+    mains.forEach(m => {
+      const ch = subs.filter(s => s.parentId === m.id);
+      h += `<li class="nav-item">
+        <a class="nav-link cat-link ${activeCat === m.id && !activeSub ? 'active' : ''}" data-cat="${m.id}" href="#">
+          <i class="bi bi-tag me-2"></i>${esc(m.name)}
+        </a>`;
+      if (ch.length) {
+        h += `<ul class="nav flex-column ms-3">`;
+        ch.forEach(s => {
+          h += `<li class="nav-item"><a class="nav-link cat-link subcat-link ${activeSub === s.id ? 'active' : ''}" data-cat="${m.id}" data-sub="${s.id}" href="#">
+            <i class="bi bi-arrow-return-right me-1"></i>${esc(s.name)}
+          </a></li>`;
         });
-        html += `</ul>`;
+        h += `</ul>`;
       }
-      html += `</li>`;
+      h += `</li>`;
     });
-
-    list.innerHTML = html;
-
-    list.querySelectorAll('.category-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeCat = btn.dataset.cat || null;
-        activeSub = null;
-        const cat = categories.find(c => c.id === activeCat);
-        document.getElementById('currentCategoryTitle').textContent =
-          cat ? cat.name : 'Todos los productos';
-        renderCategories(); renderProducts();
-      });
-    });
-    list.querySelectorAll('.subcategory-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeCat = btn.dataset.parent || null;
-        activeSub = btn.dataset.subcat || null;
-        const sub = categories.find(c => c.id === activeSub);
-        document.getElementById('currentCategoryTitle').textContent = sub ? sub.name : 'Productos';
-        renderCategories(); renderProducts();
-      });
-    });
+    el.innerHTML = h;
+    el.querySelectorAll('.cat-link').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault();
+      activeCat = a.dataset.cat || null;
+      activeSub = a.dataset.sub || null;
+      const entity = activeSub ? cats.find(c => c.id === activeSub) : cats.find(c => c.id === activeCat);
+      const title = document.getElementById('currentCatTitle');
+      if (title) title.textContent = entity ? entity.name : 'Todos los productos';
+      renderCats(); renderProds();
+    }));
   }
 
-  function renderProducts() {
+  function renderProds() {
     const grid = document.getElementById('productsGrid');
-    // Remove skeleton
+    if (!grid) return;
     document.getElementById('productsLoading')?.remove();
 
-    let list = products;
+    let list = [...prods];
     if (activeSub) {
       list = list.filter(p => p.subcategoryId === activeSub);
     } else if (activeCat) {
-      const childIds = categories.filter(c => c.parentId === activeCat).map(c => c.id);
+      const childIds = cats.filter(c => c.parentId === activeCat).map(c => c.id);
       list = list.filter(p => p.categoryId === activeCat || childIds.includes(p.subcategoryId));
     }
-    if (query) {
-      const q = query.toLowerCase();
-      list = list.filter(p =>
-        p.name.toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q));
+    if (q) {
+      const lq = q.toLowerCase();
+      list = list.filter(p => (p.name || '').toLowerCase().includes(lq) || (p.description || '').toLowerCase().includes(lq));
     }
 
     if (!list.length) {
-      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
-        <div class="empty-icon">🔍</div><p>No se encontraron productos</p></div>`;
+      grid.innerHTML = `<div class="col-12 text-center py-5"><i class="bi bi-search display-4 text-muted"></i><p class="mt-3 text-muted">${prods.length ? 'Sin resultados' : 'No hay productos disponibles'}</p></div>`;
       return;
     }
 
     grid.innerHTML = list.map(buildCard).join('');
-
-    grid.querySelectorAll('.product-add-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const p = products.find(x => x.id === btn.dataset.id);
-        if (p) Cart.addItem(p);
-      });
-    });
-    grid.querySelectorAll('.qty-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const p = products.find(x => x.id === btn.dataset.id);
-        if (btn.dataset.action === 'add' && p) Cart.addItem(p);
-        else Cart.removeOne(btn.dataset.id);
-      });
-    });
+    grid.querySelectorAll('.btn-add').forEach(btn => btn.addEventListener('click', () => {
+      const p = prods.find(x => x.id === btn.dataset.id);
+      if (p && window.Cart) Cart.add(p);
+    }));
+    grid.querySelectorAll('.btn-inc').forEach(btn => btn.addEventListener('click', () => {
+      const p = prods.find(x => x.id === btn.dataset.id);
+      if (p && window.Cart) Cart.add(p);
+    }));
+    grid.querySelectorAll('.btn-dec').forEach(btn => btn.addEventListener('click', () => {
+      if (window.Cart) Cart.remove(btn.dataset.id);
+    }));
   }
 
   function buildCard(p) {
-    const qty = Cart.getQty(p.id);
-    const img = p.imageUrl
-      ? `<img src="${p.imageUrl}" alt="${p.name}" loading="lazy"/>`
-      : `<span>${p.emoji||'🛍️'}</span>`;
-    const control = qty > 0
-      ? `<div class="product-qty-control">
-          <button class="qty-btn" data-id="${p.id}" data-action="remove">−</button>
-          <span class="qty-value">${qty}</span>
-          <button class="qty-btn" data-id="${p.id}" data-action="add">+</button>
+    const qty = window.Cart ? Cart.qty(p.id) : 0;
+    const imgUrl = normalizeUrl(p.imageUrl);
+    const fallback = `<div class="prod-img-placeholder d-flex align-items-center justify-content-center h-100"><i class="bi bi-bag display-4 text-muted"></i></div>`;
+    const imgHtml = imgUrl
+      ? `<img src="${imgUrl}" alt="${attr(p.name)}" class="card-img-top prod-img" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">${imgUrl ? `<div class="prod-img-placeholder d-flex align-items-center justify-content-center h-100" style="display:none!important"><i class="bi bi-bag display-4 text-muted"></i></div>` : ''}`
+      : fallback;
+    const stockBadge = (p.stock != null && p.stock <= 5 && p.stock > 0)
+      ? `<span class="badge bg-danger position-absolute top-0 end-0 m-2">Últimos ${p.stock}</span>` : '';
+    const ctrl = qty > 0
+      ? `<div class="input-group input-group-sm qty-ctrl">
+          <button class="btn btn-outline-secondary btn-dec" data-id="${p.id}"><i class="bi bi-dash"></i></button>
+          <span class="input-group-text qty-val">${qty}</span>
+          <button class="btn btn-outline-secondary btn-inc" data-id="${p.id}"><i class="bi bi-plus"></i></button>
         </div>`
-      : `<button class="product-add-btn" data-id="${p.id}" aria-label="Agregar ${p.name}">+</button>`;
-
-    const stockBadge = (p.stock !== null && p.stock !== undefined && p.stock <= 5 && p.stock > 0)
-      ? `<span class="stock-badge low">Últimos ${p.stock}</span>` : '';
-
-    return `<div class="product-card" data-id="${p.id}">
-      <div class="product-img-wrap">${img}</div>
-      ${stockBadge}
-      <div class="product-info">
-        <p class="product-name">${p.name}</p>
-        ${p.description ? `<p class="product-desc">${p.description}</p>` : ''}
-      </div>
-      <div class="product-footer">
-        <span class="product-price">${APP_CONFIG.currency} ${Number(p.price).toFixed(2)}</span>
-        ${control}
+      : `<button class="btn btn-primary btn-sm w-100 btn-add" data-id="${p.id}"><i class="bi bi-cart-plus me-1"></i>Agregar</button>`;
+    return `<div class="col">
+      <div class="card h-100 prod-card">
+        <div class="prod-img-wrap position-relative">${imgHtml}${stockBadge}</div>
+        <div class="card-body d-flex flex-column p-3">
+          <h6 class="card-title prod-name mb-1">${esc(p.name)}</h6>
+          ${p.description ? `<p class="card-text prod-desc text-muted small mb-2">${esc(p.description)}</p>` : ''}
+          <div class="mt-auto">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="prod-price fw-bold">${APP_CONFIG.currency} ${Number(p.price).toFixed(2)}</span>
+              ${p.stock != null ? `<small class="text-muted">Stock: ${p.stock}</small>` : ''}
+            </div>
+            ${ctrl}
+          </div>
+        </div>
       </div>
     </div>`;
   }
 
-  // Called by Cart to refresh qty controls without full re-subscribe
-  function refreshCards() { renderProducts(); }
+  function normalizeUrl(url) {
+    if (!url) return null;
+    const s = String(url).trim();
+    if (!s) return null;
+    if (/^(https?:\/\/|data:image)/i.test(s)) return s;
+    if (s.startsWith('//')) return 'https:' + s;
+    return s;
+  }
 
-  return { init, refreshCards, get categories() { return categories; } };
+  function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function attr(s) { return String(s ?? '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  function refreshCards() { renderProds(); }
+
+  return { init, refreshCards };
 })();

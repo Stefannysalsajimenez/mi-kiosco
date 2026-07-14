@@ -1,175 +1,466 @@
-function capitalize(s){return String(s).charAt(0).toUpperCase()+String(s).slice(1);}
-function openModal(el){if(!el)return;el.style.display='flex';requestAnimationFrame(()=>el.classList.add('open'));}
-function closeModal(el){if(!el)return;el.classList.remove('open');setTimeout(()=>{if(!el.classList.contains('open'))el.style.display='';},260);}
-function showToast(msg,type='info'){
-  const c=document.getElementById('toastContainer');if(!c)return;
-  const icons={success:'✅',error:'❌',info:'ℹ️',warning:'⚠️'};
-  const t=document.createElement('div');t.className='toast '+type;
-  t.innerHTML='<span>'+(icons[type]||'ℹ️')+'</span><span>'+msg+'</span>';
-  c.appendChild(t);
-  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),320);},3000);
+// js/app.js — Main orchestrator
+'use strict';
+
+// ── Global utilities ──────────────────────────────────────────────────────
+function showToast(msg, type = 'info') {
+  const c = document.getElementById('toastContainer');
+  if (!c) return;
+  const icons = { success: 'check-circle-fill', danger: 'exclamation-triangle-fill', info: 'info-circle-fill', warning: 'exclamation-circle-fill' };
+  const colors = { success: 'text-bg-success', danger: 'text-bg-danger', info: 'text-bg-info', warning: 'text-bg-warning' };
+  const id = 'toast_' + Date.now();
+  c.insertAdjacentHTML('beforeend', `
+    <div id="${id}" class="toast align-items-center ${colors[type] || 'text-bg-secondary'} border-0 show" role="alert">
+      <div class="d-flex">
+        <div class="toast-body"><i class="bi bi-${icons[type] || 'info-circle'} me-2"></i>${msg}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>`);
+  const el = document.getElementById(id);
+  const t = new bootstrap.Toast(el, { delay: 3500 });
+  t.show();
+  el.addEventListener('hidden.bs.toast', () => el.remove());
 }
-const App=(()=>{
-  let page='store';
-  function showPage(p){
-    page=p;
-    document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
-    const target=document.getElementById(p==='store'?'pageStore':'pageAdmin');
-    if(target)target.classList.add('active');
-    const pb=document.getElementById('profileBtn'),ab=document.getElementById('loginBtn');
-    if(p==='admin'){
-      if(pb)pb.style.display='none';
-      if(ab){ab.style.display='flex';ab.innerHTML='🏪';ab.title='Ver tienda';}
-      if(window.Admin)Admin.init();
-      if(window.Dashboard)Dashboard.init();
-      if(window.Orders)Orders.init();
-      if(window.Notifications){Notifications.init();Notifications.requestPermission?.();}
-    }else{
-      if(ab)ab.style.display='none';
-      if(pb){pb.style.display='flex';updateProfileBtn();}
-      if(window.Notifications)Notifications.stop?.();
+
+function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ── App state ────────────────────────────────────────────────────────────
+const App = (() => {
+  let currentPage = 'store';
+
+  function showPage(page) {
+    currentPage = page;
+    document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active-page'));
+    const target = document.getElementById('page-' + page);
+    if (target) target.classList.add('active-page');
+
+    if (page === 'admin') {
+      Admin.init();
+      Dashboard.init();
+      Orders.init();
+      updateAdminHeaderBtn(true);
+    } else {
+      updateAdminHeaderBtn(false);
     }
   }
-  function updateProfileBtn(){
-    const btn=document.getElementById('profileBtn');if(!btn)return;
-    const name=localStorage.getItem('kiosco_user_name');
-    if(name){btn.innerHTML='<span style="font-size:.6rem;font-weight:700;max-width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1">'+name.split(' ')[0]+'</span>';btn.title=name+' · Ver perfil';}
-    else{btn.innerHTML='👤';btn.title='Ingresar';}
-  }
-  function initTheme(){
-    const saved=localStorage.getItem('kiosco_theme')||'dark';applyTheme(saved);
-    document.getElementById('themeToggle')?.addEventListener('click',()=>applyTheme(document.body.classList.contains('theme-dark')?'light':'dark'));
-  }
-  function applyTheme(t){document.body.classList.remove('theme-dark','theme-light');document.body.classList.add('theme-'+t);localStorage.setItem('kiosco_theme',t);const i=document.querySelector('.theme-icon');if(i)i.textContent=t==='dark'?'☀️':'🌙';}
-  async function loadBranding(){
-    try{
-      const doc=await db.collection(COLL.config).doc('theme').get();if(!doc.exists)return;const d=doc.data();
-      if(d.accentColor){document.documentElement.style.setProperty('--accent',d.accentColor);const r=parseInt(d.accentColor.slice(1,3),16),g=parseInt(d.accentColor.slice(3,5),16),b=parseInt(d.accentColor.slice(5,7),16);document.documentElement.style.setProperty('--accent-glow',`rgba(${r},${g},${b},.22)`);}
-      if(d.storeName){const el=document.querySelector('.logo-text');if(el)el.textContent=d.storeName;APP_CONFIG.storeName=d.storeName;document.title=d.storeName;}
-      if(d.storeEmoji){const el=document.querySelector('.logo-icon');if(el)el.textContent=d.storeEmoji;}
-    }catch{}
-  }
-  function bindLoginModal(){
-    const modal=document.getElementById('loginModal');if(!modal)return;
-    const errEl=document.getElementById('loginError');
-    function switchTab(t){
-      document.getElementById('loginTabUser')?.classList.toggle('active',t==='user');
-      document.getElementById('loginTabAdmin')?.classList.toggle('active',t==='admin');
-      const pu=document.getElementById('loginPanelUser'),pa=document.getElementById('loginPanelAdmin');
-      if(pu)pu.style.display=t==='user'?'':'none';if(pa)pa.style.display=t==='admin'?'':'none';
-      if(errEl)errEl.textContent='';
+
+  function updateAdminHeaderBtn(isAdmin) {
+    const btn = document.getElementById('profileBtn');
+    if (!btn) return;
+    if (isAdmin) {
+      btn.innerHTML = '<i class="bi bi-tools"></i>';
+      btn.title = 'Panel admin';
+    } else {
+      const name = Auth.getClientName();
+      btn.innerHTML = '<i class="bi bi-person-circle"></i>';
+      btn.title = name ? `${name} — Mi perfil` : 'Ingresar';
     }
-    document.getElementById('loginTabUser')?.addEventListener('click',()=>switchTab('user'));
-    document.getElementById('loginTabAdmin')?.addEventListener('click',()=>switchTab('admin'));
-    document.getElementById('closeLoginModal')?.addEventListener('click',()=>closeModal(modal));
-    modal.addEventListener('click',ev=>{if(ev.target===modal)closeModal(modal);});
-    document.getElementById('userLoginBtn')?.addEventListener('click',()=>{
-      const name=document.getElementById('userNameInput')?.value.trim();
-      const phone=document.getElementById('userPhoneInput')?.value.trim();
-      if(!name){if(errEl)errEl.textContent='Ingresa tu nombre';return;}
-      localStorage.setItem('kiosco_user_name',name);
-      if(phone)localStorage.setItem('kiosco_user_phone','+51'+phone.replace(/\D/g,''));
-      closeModal(modal);updateProfileBtn();showToast('¡Bienvenido, '+name+'! 👋','success');
-    });
-    document.getElementById('sendCodeBtn')?.addEventListener('click',async()=>{
-      const digits=document.getElementById('phoneInput')?.value.trim();
-      const btn=document.getElementById('sendCodeBtn');
-      if(!digits||digits.replace(/\D/g,'').length<9){if(errEl)errEl.textContent='Número inválido';return;}
-      if(errEl)errEl.textContent='';if(btn){btn.disabled=true;btn.textContent='Enviando…';}
-      try{
-        await Auth.sendCode(digits);
-        document.getElementById('loginStep1').style.display='none';document.getElementById('loginStep2').style.display='';
-        showToast('Código enviado 📱','success');setTimeout(()=>document.getElementById('codeInput')?.focus(),100);
-      }catch(err){if(errEl)errEl.textContent=err.message||'Error al enviar';}
-      finally{if(btn){btn.disabled=false;btn.textContent='Enviar código 📱';}}
-    });
-    document.getElementById('verifyCodeBtn')?.addEventListener('click',async()=>{
-      const code=document.getElementById('codeInput')?.value.trim();
-      const btn=document.getElementById('verifyCodeBtn');
-      if(!code||code.length!==6){if(errEl)errEl.textContent='El código tiene 6 dígitos';return;}
-      if(btn){btn.disabled=true;btn.textContent='Verificando…';}
-      try{
-        const user=await Auth.verifyCode(code);const isAdm=await Auth.checkIsAdmin(user);
-        if(isAdm){closeModal(modal);showPage('admin');showToast('Bienvenido, administrador 👋','success');}
-        else{await Auth.signOut();if(errEl)errEl.textContent='Acceso denegado.';}
-      }catch{if(errEl)errEl.textContent='Código incorrecto o expirado';}
-      finally{if(btn){btn.disabled=false;btn.textContent='Verificar ✅';}}
-    });
-    Auth.onAuthChange(async user=>{if(user){const isAdm=await Auth.checkIsAdmin(user);if(!isAdm)await Auth.signOut();}});
   }
-  function bindProfileModal(){
-    const pb=document.getElementById('profileBtn'),modal=document.getElementById('profileModal');
-    if(!pb)return;
-    pb.addEventListener('click',()=>{
-      const name=localStorage.getItem('kiosco_user_name');
-      if(name){
-        const ni=document.getElementById('profileNameInput'),pi=document.getElementById('profilePhoneInput');
-        const ph=localStorage.getItem('kiosco_user_phone')||'';
-        if(ni)ni.value=name;if(pi)pi.value=ph.replace('+51','');
-        modal?.querySelectorAll('[data-profile-tab]').forEach(t=>t.classList.remove('active'));
-        modal?.querySelector('[data-profile-tab="info"]')?.classList.add('active');
-        const ti=document.getElementById('profileTabInfo'),th=document.getElementById('profileTabHistory');
-        if(ti)ti.style.display='';if(th)th.style.display='none';
-        openModal(modal);
-      }else{openModal(document.getElementById('loginModal'));}
-    });
-    if(!modal)return;
-    document.getElementById('closeProfileModal')?.addEventListener('click',()=>closeModal(modal));
-    modal.addEventListener('click',ev=>{if(ev.target===modal)closeModal(modal);});
-    modal.querySelectorAll('[data-profile-tab]').forEach(tab=>{
-      tab.addEventListener('click',()=>{
-        modal.querySelectorAll('[data-profile-tab]').forEach(t=>t.classList.remove('active'));tab.classList.add('active');
-        const t=tab.dataset.profileTab;
-        const ti=document.getElementById('profileTabInfo'),th=document.getElementById('profileTabHistory');
-        if(ti)ti.style.display=t==='info'?'':'none';if(th)th.style.display=t==='history'?'':'none';
-        if(t==='history')loadOrderHistory();
-      });
-    });
-    document.getElementById('saveProfileBtn')?.addEventListener('click',()=>{
-      const name=document.getElementById('profileNameInput')?.value.trim();
-      const phone=document.getElementById('profilePhoneInput')?.value.trim();
-      if(!name){showToast('Ingresa tu nombre','error');return;}
-      localStorage.setItem('kiosco_user_name',name);
-      if(phone)localStorage.setItem('kiosco_user_phone','+51'+phone.replace(/\D/g,''));
-      updateProfileBtn();closeModal(modal);showToast('Perfil guardado ✅','success');
-    });
-    document.getElementById('logoutUserBtn')?.addEventListener('click',()=>{
-      if(!confirm('¿Cerrar sesión?'))return;
-      localStorage.removeItem('kiosco_user_name');localStorage.removeItem('kiosco_user_phone');
-      closeModal(modal);updateProfileBtn();showToast('Sesión cerrada','info');
-    });
-  }
-  async function loadOrderHistory(){
-    const container=document.getElementById('profileOrderHistory');if(!container)return;
-    const name=localStorage.getItem('kiosco_user_name');
-    if(!name){container.innerHTML='<div class="empty-state"><div class="empty-icon">👤</div><p>Guarda tu nombre para ver tu historial</p></div>';return;}
-    container.innerHTML='<div class="skeleton" style="height:100px;border-radius:var(--radius-md)"></div>';
-    try{
-      const snap=await db.collection(COLL.orders).where('customer','==',name).orderBy('createdAt','desc').limit(20).get();
-      const orders=snap.docs.map(d=>({id:d.id,...d.data()}));
-      if(!orders.length){container.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><p>Aún no tienes pedidos</p></div>';return;}
-      const icons={pending:'⏳',done:'✅',rejected:'❌'};
-      const labels={pending:'Pendiente',done:'Completado',rejected:'Rechazado'};
-      container.innerHTML=orders.map(o=>{
-        const date=o.createdAt?.toDate?o.createdAt.toDate().toLocaleString('es-PE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
-        const items=(o.items||[]).map(i=>i.name+' ×'+i.qty).join(', ');
-        return `<div class="order-history-item"><div class="oh-header"><span style="font-weight:700;font-size:.84rem">${date}</span><span class="oh-status ${o.status}">${icons[o.status]||''} ${labels[o.status]||o.status}</span></div><p style="color:var(--text-2);font-size:.8rem;margin:.2rem 0">${items}</p><p style="font-weight:800;color:var(--accent);font-size:.88rem">${APP_CONFIG.currency} ${(o.total||0).toFixed(2)}</p></div>`;
-      }).join('');
-    }catch(err){container.innerHTML='<div class="empty-state"><p>Error al cargar historial</p></div>';}
-  }
-  function bindAdminBtn(){
-    document.getElementById('loginBtn')?.addEventListener('click',()=>showPage(page==='admin'?'store':'admin'));
-    document.getElementById('backToStoreBtn')?.addEventListener('click',()=>showPage('store'));
-    document.getElementById('logoutBtn')?.addEventListener('click',()=>{
-      if(!confirm('¿Cerrar sesión de administrador?'))return;
-      Auth.signOut().then(()=>{showPage('store');showToast('Sesión cerrada','info');});
-    });
-  }
-  function init(){
-    initTheme();loadBranding();bindLoginModal();bindProfileModal();bindAdminBtn();
-    if(window.Store)Store.init();if(window.Cart)Cart.init();if(window.UIHelpers)UIHelpers.init();
-    showPage('store');
-  }
-  return{init,showPage,updateProfileBtn};
+
+  return { showPage, get currentPage() { return currentPage; } };
 })();
-document.addEventListener('DOMContentLoaded',()=>App.init());
+
+// ── Auth Modal (unified: client / admin) ─────────────────────────────────
+function initAuthModal() {
+  const modal = document.getElementById('authModal');
+  const profileBtn = document.getElementById('profileBtn');
+
+  profileBtn?.addEventListener('click', () => {
+    const role = Auth.getRole();
+    if (role === 'client') {
+      // Show profile modal
+      openProfileModal();
+      return;
+    }
+    if (auth.currentUser) {
+      // Admin already logged in — toggle store/admin
+      App.showPage(App.currentPage === 'admin' ? 'store' : 'admin');
+      return;
+    }
+    // Not logged in — show auth choice
+    showAuthChoice();
+    new bootstrap.Modal(modal).show();
+  });
+
+  // Tab switching inside auth modal
+  document.getElementById('tabClient')?.addEventListener('click', () => switchAuthTab('client'));
+  document.getElementById('tabAdmin')?.addEventListener('click', () => switchAuthTab('admin'));
+
+  // Client login
+  document.getElementById('clientLoginForm')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const name = document.getElementById('clientName').value.trim();
+    const phone = document.getElementById('clientPhone').value.trim();
+    if (!name) { showToast('Ingresa tu nombre', 'warning'); return; }
+    Auth.loginClient(name, phone);
+    bootstrap.Modal.getInstance(modal)?.hide();
+    prefillCartName(name);
+    App.showPage('store');
+    showToast(`¡Hola, ${name}! 👋`, 'success');
+    App.showPage('store');
+  });
+
+  // Admin — send code
+  document.getElementById('sendCodeBtn')?.addEventListener('click', async () => {
+    const digits = document.getElementById('adminPhone').value.trim();
+    if (digits.replace(/\D/g, '').length < 9) { showToast('Número inválido', 'warning'); return; }
+    const btn = document.getElementById('sendCodeBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando…';
+    try {
+      await Auth.sendCode(digits, 'recaptchaContainer');
+      document.getElementById('step1Admin').style.display = 'none';
+      document.getElementById('step2Admin').style.display = 'block';
+      showToast('Código enviado 📱', 'info');
+      document.getElementById('adminCode').focus();
+    } catch (e) {
+      showToast('Error: ' + e.message, 'danger');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-send me-2"></i>Enviar código';
+    }
+  });
+
+  // Admin — verify code
+  document.getElementById('verifyCodeBtn')?.addEventListener('click', async () => {
+    const code = document.getElementById('adminCode').value.trim();
+    if (code.length !== 6) { showToast('Código de 6 dígitos', 'warning'); return; }
+    const btn = document.getElementById('verifyCodeBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verificando…';
+    try {
+      const user = await Auth.verifyCode(code);
+      const isAdm = await Auth.checkIsAdmin(user);
+      if (isAdm) {
+        localStorage.setItem('kk_role', 'admin');
+        bootstrap.Modal.getInstance(modal)?.hide();
+        App.showPage('admin');
+        showToast('Bienvenido, administrador 👋', 'success');
+      } else {
+        await Auth.logout();
+        showToast('Acceso denegado', 'danger');
+      }
+    } catch (e) {
+      showToast('Código incorrecto', 'danger');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-shield-check me-2"></i>Verificar';
+    }
+  });
+
+  // Back to step 1
+  document.getElementById('backToStep1')?.addEventListener('click', () => {
+    document.getElementById('step1Admin').style.display = 'block';
+    document.getElementById('step2Admin').style.display = 'none';
+  });
+
+  // Logout
+  document.getElementById('logoutAdminBtn')?.addEventListener('click', () => {
+    Auth.logout().then(() => {
+      App.showPage('store');
+      showToast('Sesión cerrada', 'info');
+    });
+  });
+
+  // Firebase auth state
+  Auth.onAuthChange(async user => {
+    if (user) {
+      const isAdm = await Auth.checkIsAdmin(user);
+      if (isAdm) {
+        localStorage.setItem('kk_role', 'admin');
+      } else {
+        await Auth.logout();
+      }
+    }
+  });
+}
+
+function showAuthChoice() {
+  document.getElementById('step1Admin').style.display = 'block';
+  document.getElementById('step2Admin').style.display = 'none';
+  switchAuthTab('client');
+  document.getElementById('clientLoginForm')?.reset();
+  // Pre-fill if client was logged in before
+  const name = Auth.getClientName();
+  if (name) document.getElementById('clientName').value = name;
+}
+
+function switchAuthTab(tab) {
+  const tabClient = document.getElementById('tabClient');
+  const tabAdmin = document.getElementById('tabAdmin');
+  const panelClient = document.getElementById('panelClient');
+  const panelAdmin = document.getElementById('panelAdmin');
+  if (tab === 'client') {
+    tabClient?.classList.add('active');
+    tabAdmin?.classList.remove('active');
+    if (panelClient) panelClient.style.display = 'block';
+    if (panelAdmin) panelAdmin.style.display = 'none';
+  } else {
+    tabAdmin?.classList.add('active');
+    tabClient?.classList.remove('active');
+    if (panelAdmin) panelAdmin.style.display = 'block';
+    if (panelClient) panelClient.style.display = 'none';
+  }
+}
+
+// ── Profile Modal ─────────────────────────────────────────────────────────
+function openProfileModal() {
+  const modal = document.getElementById('profileModal');
+  if (!modal) return;
+  document.getElementById('profileName').value = Auth.getClientName();
+  document.getElementById('profilePhone').value = Auth.getClientPhone();
+  loadProfileOrders();
+  new bootstrap.Modal(modal).show();
+}
+
+function initProfileModal() {
+  document.getElementById('saveProfileBtn')?.addEventListener('click', () => {
+    const name = document.getElementById('profileName').value.trim();
+    const phone = document.getElementById('profilePhone').value.trim();
+    if (!name) { showToast('Nombre requerido', 'warning'); return; }
+    Auth.loginClient(name, phone);
+    prefillCartName(name);
+    showToast('Perfil guardado ✓', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('profileModal'))?.hide();
+  });
+
+  document.getElementById('logoutClientBtn')?.addEventListener('click', () => {
+    Auth.logout();
+    bootstrap.Modal.getInstance(document.getElementById('profileModal'))?.hide();
+    showToast('Sesión cerrada', 'info');
+    document.getElementById('profileBtn').innerHTML = '<i class="bi bi-person-circle"></i>';
+    document.getElementById('profileBtn').title = 'Ingresar';
+  });
+
+  document.querySelector('[data-profile-tab]')?.closest('.d-flex')?.querySelectorAll('[data-profile-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('[data-profile-tab]').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const which = tab.dataset.profileTab;
+      document.querySelectorAll('.profile-pane').forEach(p => p.style.display = 'none');
+      document.getElementById('profilePane-' + which).style.display = 'block';
+      if (which === 'orders') loadProfileOrders();
+    });
+  });
+}
+
+async function loadProfileOrders() {
+  const el = document.getElementById('profileOrdersList');
+  if (!el) return;
+  const name = Auth.getClientName();
+  if (!name) { el.innerHTML = '<p class="text-muted">Ingresa sesión para ver tus pedidos.</p>'; return; }
+  el.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+  try {
+    // No orderBy — sort in JS to avoid composite index
+    const snap = await db.collection(COLL.orders).where('customer', '==', name).get();
+    const orders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const ta = a.createdAt?.toDate?.() || new Date(0);
+        const tb = b.createdAt?.toDate?.() || new Date(0);
+        return tb - ta;
+      }).slice(0, 20);
+    if (!orders.length) { el.innerHTML = '<p class="text-muted">Aún no tienes pedidos.</p>'; return; }
+    const statusBadge = { pending: 'warning', done: 'success', rejected: 'danger' };
+    const statusLabel = { pending: 'Pendiente', done: 'Completado', rejected: 'Rechazado' };
+    el.innerHTML = orders.map(o => {
+      const dt = o.createdAt?.toDate ? o.createdAt.toDate().toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+      const items = (o.items || []).map(i => `${i.name} ×${i.qty}`).join(', ');
+      return `<div class="card mb-2">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <small class="text-muted">${dt}</small>
+            <span class="badge bg-${statusBadge[o.status] || 'secondary'}">${statusLabel[o.status] || o.status}</span>
+          </div>
+          <p class="mb-1 small">${esc(items)}</p>
+          <strong class="text-primary">${APP_CONFIG.currency} ${(o.total || 0).toFixed(2)}</strong>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<p class="text-danger small"><i class="bi bi-exclamation-triangle me-1"></i>${e.message}</p>`;
+    console.warn('profile orders:', e.message);
+  }
+}
+
+// ── Cart Order Modal ──────────────────────────────────────────────────────
+function initOrderModal() {
+  document.getElementById('sendOrderBtn')?.addEventListener('click', openOrderModal);
+  document.getElementById('sendOrderBtnMobile')?.addEventListener('click', openOrderModal);
+
+  const deliveryTypeInputs = document.querySelectorAll('input[name="deliveryType"]');
+  deliveryTypeInputs.forEach(r => r.addEventListener('change', () => {
+    const isDelivery = document.querySelector('input[name="deliveryType"]:checked')?.value === 'delivery';
+    document.getElementById('addressRow').style.display = isDelivery ? 'block' : 'none';
+  }));
+
+  document.getElementById('useGpsBtn')?.addEventListener('click', () => {
+    const status = document.getElementById('gpsStatus');
+    if (!navigator.geolocation) { showToast('GPS no disponible', 'warning'); return; }
+    status.textContent = 'Obteniendo ubicación…';
+    navigator.geolocation.getCurrentPosition(pos => {
+      const lat = pos.coords.latitude.toFixed(6), lng = pos.coords.longitude.toFixed(6);
+      document.getElementById('orderAddress').value = `GPS: ${lat}, ${lng}`;
+      status.innerHTML = `<a href="https://maps.google.com?q=${lat},${lng}" target="_blank" class="text-info small">Ver en Google Maps</a>`;
+      document.getElementById('orderAddress').dataset.lat = lat;
+      document.getElementById('orderAddress').dataset.lng = lng;
+    }, () => { status.textContent = ''; showToast('No se pudo obtener ubicación', 'warning'); });
+  });
+
+  document.getElementById('confirmOrderBtn')?.addEventListener('click', submitOrder);
+}
+
+function openOrderModal() {
+  if (!Cart.count()) { showToast('Tu carrito está vacío', 'warning'); return; }
+  const name = Auth.getClientName();
+  if (name) document.getElementById('orderCustomerName').value = name;
+  const phone = Auth.getClientPhone();
+  if (phone) document.getElementById('orderCustomerPhone').value = phone;
+
+  // Set default date (today)
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('orderDate').value = today;
+  document.getElementById('orderDate').min = today;
+  document.getElementById('orderDate').max = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+
+  // Summary
+  const items = Cart.getItems();
+  document.getElementById('orderSummary').innerHTML = items.map(i =>
+    `<div class="d-flex justify-content-between small">
+      <span>${esc(i.name)} ×${i.qty}</span>
+      <span>${APP_CONFIG.currency} ${(i.price * i.qty).toFixed(2)}</span>
+    </div>`).join('') + `<div class="d-flex justify-content-between fw-bold border-top mt-2 pt-2">
+      <span>Total</span><span>${APP_CONFIG.currency} ${Cart.total().toFixed(2)}</span>
+    </div>`;
+
+  new bootstrap.Modal(document.getElementById('orderModal')).show();
+}
+
+async function submitOrder() {
+  const name = document.getElementById('orderCustomerName').value.trim();
+  const phone = document.getElementById('orderCustomerPhone').value.trim();
+  const notes = document.getElementById('orderNotes').value.trim();
+  const dtype = document.querySelector('input[name="deliveryType"]:checked')?.value || 'pickup';
+  const addr = document.getElementById('orderAddress').value.trim();
+  const date = document.getElementById('orderDate').value;
+  const time = document.getElementById('orderTime').value;
+  const addrEl = document.getElementById('orderAddress');
+  const gps = addrEl.dataset.lat ? { lat: parseFloat(addrEl.dataset.lat), lng: parseFloat(addrEl.dataset.lng) } : null;
+
+  if (!name) { showToast('Ingresa tu nombre', 'warning'); return; }
+  const btn = document.getElementById('confirmOrderBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando…';
+  try {
+    const id = await Cart.checkout(name, phone, notes, dtype, addr, date, time, gps);
+    bootstrap.Modal.getInstance(document.getElementById('orderModal'))?.hide();
+    showToast(`¡Pedido enviado! 🎉 #${id.slice(-6).toUpperCase()}`, 'success');
+    if (!Auth.getClientName()) Auth.loginClient(name, phone);
+  } catch (e) {
+    showToast('Error: ' + e.message, 'danger');
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-send me-2"></i>Confirmar Pedido';
+  }
+}
+
+// ── Theme ────────────────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('kk_theme') || 'dark';
+  setTheme(saved);
+  document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
+    const next = document.body.dataset.bsTheme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+  });
+}
+
+function setTheme(theme) {
+  document.body.dataset.bsTheme = theme;
+  localStorage.setItem('kk_theme', theme);
+  const icon = document.getElementById('themeIcon');
+  if (icon) icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+}
+
+// ── Branding loader ───────────────────────────────────────────────────────
+async function loadGlobalBranding() {
+  try {
+    const doc = await db.collection(COLL.config).doc('theme').get();
+    if (!doc.exists) return;
+    const d = doc.data();
+    if (d.accentColor) {
+      const styleEl = document.getElementById('accentStyle') || Object.assign(document.createElement('style'), { id: 'accentStyle' });
+      if (!styleEl.parentNode) document.head.appendChild(styleEl);
+      const r = parseInt(d.accentColor.slice(1, 3), 16), g = parseInt(d.accentColor.slice(3, 5), 16), b = parseInt(d.accentColor.slice(5, 7), 16);
+      styleEl.textContent = `:root{--accent:${d.accentColor};--bs-primary:${d.accentColor};--bs-primary-rgb:${r},${g},${b};}`;
+    }
+    if (d.storeName) {
+      document.querySelectorAll('.logo-text').forEach(el => el.textContent = d.storeName);
+      document.title = d.storeName;
+      if (window.APP_CONFIG) APP_CONFIG.storeName = d.storeName;
+    }
+    if (d.storeLogoUrl) {
+      document.querySelectorAll('.logo-icon').forEach(el => {
+        el.innerHTML = `<img src="${d.storeLogoUrl}" style="width:32px;height:32px;border-radius:6px;object-fit:cover" onerror="this.parentElement.innerHTML='<i class=\\'bi bi-bag-fill\\'></i>'">`;
+      });
+    } else if (d.storeEmoji) {
+      document.querySelectorAll('.logo-icon').forEach(el => el.textContent = d.storeEmoji);
+    }
+  } catch (e) { console.warn('branding:', e.message); }
+}
+
+// ── PWA install ───────────────────────────────────────────────────────────
+let deferredInstall = null;
+function initPWA() {
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstall = e;
+    const btn = document.getElementById('installPwaBtn');
+    if (btn) btn.style.display = 'inline-flex';
+  });
+  document.getElementById('installPwaBtn')?.addEventListener('click', async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    const { outcome } = await deferredInstall.userChoice;
+    if (outcome === 'accepted') {
+      document.getElementById('installPwaBtn').style.display = 'none';
+      showToast('¡App instalada! 🎉', 'success');
+    }
+    deferredInstall = null;
+  });
+}
+
+function prefillCartName(name) {
+  document.getElementById('orderCustomerName')?.setAttribute('placeholder', name);
+}
+
+// ── Admin nav ─────────────────────────────────────────────────────────────
+function initAdminNav() {
+  document.getElementById('backToStoreBtn')?.addEventListener('click', () => App.showPage('store'));
+  document.getElementById('logoutAdminBtn')?.addEventListener('click', () => {
+    Auth.logout().then(() => { App.showPage('store'); showToast('Sesión cerrada', 'info'); });
+  });
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initAuthModal();
+  initProfileModal();
+  initOrderModal();
+  initAdminNav();
+  initPWA();
+  loadGlobalBranding();
+  Auth.loadAdminPhones();
+
+  // Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return; refreshing = true; location.reload();
+      });
+    }).catch(() => { });
+  }
+
+  // Init store
+  Store.init();
+  Cart.init();
+  App.showPage('store');
+
+  // If admin was previously logged in
+  if (Auth.getRole() === 'admin' && auth.currentUser) {
+    App.showPage('admin');
+  }
+});

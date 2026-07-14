@@ -1,102 +1,43 @@
-// ===== sw.js =====
-// Service Worker v5 — Network first para CSS/JS, cache solo para imágenes
+const CACHE = 'kiosco-v12';
+const SHELL = ['/', '/index.html', '/offline.html', '/manifest.json'];
 
-const CACHE_NAME = 'kiosco-v5';
-const STATIC_SHELL = [
-  '/',
-  '/index.html',
-  '/offline.html',
-  '/manifest.json'
-];
-
-// ── Install ────────────────────────────────────────────────────────────────
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_SHELL))
-  );
-  self.skipWaiting(); // Activa inmediatamente sin esperar
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL).catch(() => { })));
+  self.skipWaiting();
 });
 
-// ── Activate: borra TODOS los cachés viejos ────────────────────────────────
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(key => {
-        if (key !== CACHE_NAME) {
-          console.log('🗑️ Borrando caché viejo:', key);
-          return caches.delete(key);
-        }
-      }))
-    ).then(() => self.clients.claim()) // Toma control de todas las pestañas
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// ── Fetch: estrategia por tipo de archivo ──────────────────────────────────
-self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Solo manejamos GET
-  if (request.method !== 'GET') return;
-
-  // Firebase / Google APIs → siempre red, sin caché
-  if (
-    url.hostname.includes('firebase') ||
-    url.hostname.includes('googleapis') ||
-    url.hostname.includes('gstatic') ||
-    url.hostname.includes('firebaseio') ||
-    url.hostname.includes('fonts.g')
-  ) {
-    event.respondWith(fetch(request).catch(() => new Response('', { status: 503 })));
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET') return;
+  if (url.hostname.includes('firebase') || url.hostname.includes('googleapis') || url.hostname.includes('gstatic')) {
+    e.respondWith(fetch(e.request).catch(() => new Response('', { status: 503 })));
     return;
   }
-
-  // CSS y JS → NETWORK FIRST (siempre descarga lo más nuevo)
-  // Si no hay red, usa el caché como respaldo
-  if (url.pathname.match(/\.(css|js)$/)) {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
+  if (url.pathname.match(/\.(js|css|json)$/) || url.pathname.endsWith('config.js')) {
+    e.respondWith(
+      fetch(e.request, { cache: 'no-store' }).then(r => {
+        if (r && r.status === 200) { const c = r.clone(); caches.open(CACHE).then(ch => ch.put(e.request, c)); }
+        return r;
+      }).catch(() => caches.match(e.request))
     );
     return;
   }
-
-  // Imágenes y SVG → cache first (no cambian seguido)
   if (url.pathname.match(/\.(png|jpg|jpeg|svg|ico|webp|gif)$/)) {
-    event.respondWith(
-      caches.match(request).then(cached => {
-        if (cached) return cached;
-        return fetch(request).then(response => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-          }
-          return response;
-        });
-      })
-    );
+    e.respondWith(caches.match(e.request).then(c => {
+      if (c) return c;
+      return fetch(e.request).then(r => { if (r && r.status === 200) { const cl = r.clone(); caches.open(CACHE).then(ch => ch.put(e.request, cl)); } return r; });
+    }));
     return;
   }
-
-  // HTML → network first con fallback a offline.html
-  event.respondWith(
-    fetch(request)
-      .then(response => {
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() =>
-        caches.match(request).then(cached => cached || caches.match('/offline.html'))
-      )
+  e.respondWith(
+    fetch(e.request).then(r => { if (r && r.status === 200) { const c = r.clone(); caches.open(CACHE).then(ch => ch.put(e.request, c)); } return r; })
+      .catch(() => caches.match(e.request).then(c => c || caches.match('/offline.html')))
   );
 });

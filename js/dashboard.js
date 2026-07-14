@@ -1,289 +1,72 @@
-// ===== js/dashboard.js =====
-// Dashboard de administrador — estadísticas, gráfico y descarga de reportes
-
+// js/dashboard.js — Dashboard with Chart.js, real Firebase data, Excel export
 const Dashboard = (() => {
-  let period      = 'day';        // 'day' | 'week' | 'month'
-  let chartInst   = null;
-  let allOrders   = [];
-  let unsubOrders = null;
-  let chartReady  = false;
+  let salesChart = null, ordersChart = null, period = 'day';
 
-  // ── Init ───────────────────────────────────────────────────────────────────
   function init() {
     bindPeriodTabs();
     bindDownloads();
-    loadChart().then(() => {
-      chartReady = true;
-      subscribeOrders();
+    loadStats();
+  }
+
+  function bindPeriodTabs() {
+    document.querySelectorAll('[data-dash-period]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-dash-period]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        period = btn.dataset.dashPeriod;
+        loadStats();
+      });
     });
   }
 
-  // ── Load Chart.js dynamically ──────────────────────────────────────────────
-  function loadChart() {
-    return new Promise(resolve => {
-      if (window.Chart) { resolve(); return; }
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
-      s.onload  = resolve;
-      s.onerror = resolve; // continue even if CDN fails
-      document.head.appendChild(s);
+  function bindDownloads() {
+    ['Day', 'Week', 'Month'].forEach(p => {
+      document.getElementById('dl' + p)?.addEventListener('click', () => dlExcel(p.toLowerCase()));
     });
   }
 
-  // ── Subscribe to orders real-time ──────────────────────────────────────────
-  function subscribeOrders() {
-    if (unsubOrders) unsubOrders();
-    unsubOrders = db.collection(COLL.orders)
-      .orderBy('createdAt', 'desc')
-      .limit(1000)
-      .onSnapshot(snap => {
-        allOrders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderStats();
-        renderChart();
-      }, err => console.error('Dashboard subscription error:', err));
-  }
-
-  // ── Period filter ──────────────────────────────────────────────────────────
-  function getStartDate(p) {
+  function getStart(p) {
     const d = new Date();
-    if (p === 'day') {
-      d.setHours(0, 0, 0, 0);
-    } else if (p === 'week') {
-      d.setDate(d.getDate() - d.getDay()); // Sunday
-      d.setHours(0, 0, 0, 0);
-    } else if (p === 'month') {
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-    }
-    return d;
+    if (p === 'day') { d.setHours(0, 0, 0, 0); return d; }
+    if (p === 'week') { d.setDate(d.getDate() - (d.getDay() || 7) + 1); d.setHours(0, 0, 0, 0); return d; }
+    d.setDate(1); d.setHours(0, 0, 0, 0); return d;
   }
 
   function filterByPeriod(orders, p) {
-    const start = getStartDate(p);
+    const start = getStart(p);
     return orders.filter(o => {
-      if (!o.createdAt) return false;
-      const t = o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+      const t = o.createdAt?.toDate?.() || new Date(o.createdAt || 0);
       return t >= start;
     });
   }
 
-  // ── Stats rendering ────────────────────────────────────────────────────────
-  function renderStats() {
-    const filtered  = filterByPeriod(allOrders, period);
-    const nonRejected = filtered.filter(o => o.status !== 'rejected');
-    const revenue   = nonRejected.reduce((s, o) => s + (o.total || 0), 0);
-    const done      = filtered.filter(o => o.status === 'done').length;
-    const pending   = filtered.filter(o => o.status === 'pending').length;
-
-    setText('statRevenue', APP_CONFIG.currency + ' ' + revenue.toFixed(2));
-    setText('statOrders',  filtered.length);
-    setText('statDone',    done);
-    setText('statPending', pending);
-  }
-
-  // ── Chart rendering ────────────────────────────────────────────────────────
-  function renderChart() {
-    const canvas = document.getElementById('salesChart');
-    if (!canvas || !chartReady || !window.Chart) return;
-
-    const { labels, revenueData, countData } = buildChartData(period);
-
-    const style   = getComputedStyle(document.body);
-    const accent  = style.getPropertyValue('--accent').trim()  || '#f97316';
-    const info    = style.getPropertyValue('--info').trim()    || '#06b6d4';
-    const text3   = style.getPropertyValue('--text-3').trim()  || '#6b6b80';
-    const border  = style.getPropertyValue('--border').trim()  || 'rgba(255,255,255,.08)';
-
-    if (chartInst) { chartInst.destroy(); chartInst = null; }
-
-    chartInst = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Ventas (S/)',
-            data: revenueData,
-            backgroundColor: accent + '55',
-            borderColor: accent,
-            borderWidth: 2,
-            borderRadius: 6,
-            yAxisID: 'y'
-          },
-          {
-            label: 'Pedidos',
-            data: countData,
-            type: 'line',
-            borderColor: info,
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            pointBackgroundColor: info,
-            pointRadius: 4,
-            tension: 0.3,
-            yAxisID: 'y2'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { labels: { color: text3, font: { size: 12 } } },
-          tooltip: {
-            backgroundColor: 'rgba(0,0,0,.8)',
-            callbacks: {
-              label: ctx => ctx.datasetIndex === 0
-                ? ' S/ ' + ctx.parsed.y.toFixed(2)
-                : ' ' + ctx.parsed.y + ' pedidos'
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: { color: text3, font: { size: 11 }, maxRotation: 45 },
-            grid: { color: border }
-          },
-          y: {
-            position: 'left',
-            ticks: { color: text3, font: { size: 11 }, callback: v => 'S/' + v },
-            grid: { color: border }
-          },
-          y2: {
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            ticks: { color: info, font: { size: 11 } }
-          }
-        }
-      }
-    });
-  }
-
-  function buildChartData(p) {
-    const filtered = filterByPeriod(allOrders, p);
-    let labels = [], revenueData = [], countData = [];
-
-    if (p === 'day') {
-      labels = Array.from({ length: 24 }, (_, i) => i + 'h');
-      revenueData = new Array(24).fill(0);
-      countData   = new Array(24).fill(0);
-      filtered.forEach(o => {
-        if (o.status === 'rejected') return;
-        const h = (o.createdAt?.toDate ? o.createdAt.toDate() : new Date()).getHours();
-        revenueData[h] += o.total || 0;
-        countData[h]++;
-      });
-
-    } else if (p === 'week') {
-      labels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-      revenueData = new Array(7).fill(0);
-      countData   = new Array(7).fill(0);
-      filtered.forEach(o => {
-        if (o.status === 'rejected') return;
-        const d = (o.createdAt?.toDate ? o.createdAt.toDate() : new Date()).getDay();
-        revenueData[d] += o.total || 0;
-        countData[d]++;
-      });
-
-    } else { // month
-      const daysInMonth = new Date(
-        new Date().getFullYear(), new Date().getMonth() + 1, 0
-      ).getDate();
-      labels = Array.from({ length: daysInMonth }, (_, i) => (i + 1) + '');
-      revenueData = new Array(daysInMonth).fill(0);
-      countData   = new Array(daysInMonth).fill(0);
-      filtered.forEach(o => {
-        if (o.status === 'rejected') return;
-        const day = (o.createdAt?.toDate ? o.createdAt.toDate() : new Date()).getDate() - 1;
-        revenueData[day] += o.total || 0;
-        countData[day]++;
-      });
-    }
-
-    return { labels, revenueData, countData };
-  }
-
-  // ── Period tabs ────────────────────────────────────────────────────────────
-  function bindPeriodTabs() {
-    document.querySelectorAll('.period-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        period = tab.dataset.period;
-        renderStats();
-        renderChart();
-      });
-    });
-  }
-
-  // ── Download reports ───────────────────────────────────────────────────────
-  function bindDownloads() {
-    ['downloadDay', 'downloadWeek', 'downloadMonth'].forEach(id => {
-      document.getElementById(id)?.addEventListener('click', () => {
-        const p = id.replace('download', '').toLowerCase();
-        downloadCSV(p);
-      });
-    });
-  }
-
-  async function downloadCSV(p) {
-    let orders;
+  async function loadStats() {
     try {
-      const snap = await db.collection(COLL.orders).orderBy('createdAt', 'desc').get();
-      orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (err) {
-      showToast('Error al obtener pedidos', 'error'); return;
-    }
+      const snap = await db.collection(COLL.orders).get();
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = filterByPeriod(all, period);
 
-    const filtered = filterByPeriod(orders, p);
-    const labels   = { day: 'Hoy', week: 'Esta semana', month: 'Este mes' };
-    const revenue  = filtered
-      .filter(o => o.status !== 'rejected')
-      .reduce((s, o) => s + (o.total || 0), 0);
+      const revenue = list.filter(o => o.status !== 'rejected').reduce((s, o) => s + (o.total || 0), 0);
+      const total = list.length;
+      const done = list.filter(o => o.status === 'done').length;
+      const pending = list.filter(o => o.status === 'pending').length;
+      const rejected = list.filter(o => o.status === 'rejected').length;
 
-    const statusLabel = { pending: 'Pendiente', done: 'Hecho', rejected: 'Rechazado' };
+      setText('dashRevenue', `${APP_CONFIG.currency} ${revenue.toFixed(2)}`);
+      setText('dashOrders', total);
+      setText('dashDone', done);
+      setText('dashPending', pending);
+      setText('dashRejected', rejected);
 
-    let csv = '\uFEFF'; // BOM for Excel UTF-8
-    csv += 'Reporte Kiosco · ' + labels[p] + '\n';
-    csv += 'Generado: ' + new Date().toLocaleString('es-PE') + '\n\n';
-    csv += 'ID,Cliente,Productos,Total,Estado,Fecha\n';
+      // Low stock
+      const prodsSnap = await db.collection(COLL.products).get();
+      const prods = prodsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const lowStock = prods.filter(p => p.stock != null && p.stock <= 5 && p.active);
+      setText('dashLowStock', lowStock.length);
+      renderLowStock(lowStock);
 
-    filtered.forEach(o => {
-      const items = (o.items || []).map(i => i.name + ' x' + i.qty).join(' | ');
-      const date  = o.createdAt?.toDate
-        ? o.createdAt.toDate().toLocaleString('es-PE')
-        : '';
-      csv += [
-        o.id,
-        '"' + (o.customer || 'N/A') + '"',
-        '"' + items + '"',
-        APP_CONFIG.currency + ' ' + (o.total || 0).toFixed(2),
-        statusLabel[o.status] || o.status,
-        '"' + date + '"'
-      ].join(',') + '\n';
-    });
-
-    csv += '\nRESUMEN\n';
-    csv += 'Total pedidos,' + filtered.length + '\n';
-    csv += 'Completados,' + filtered.filter(o => o.status === 'done').length + '\n';
-    csv += 'Pendientes,' + filtered.filter(o => o.status === 'pending').length + '\n';
-    csv += 'Rechazados,' + filtered.filter(o => o.status === 'rejected').length + '\n';
-    csv += 'Ingresos totales,' + APP_CONFIG.currency + ' ' + revenue.toFixed(2) + '\n';
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'kiosco-reporte-' + p + '-' + new Date().toISOString().slice(0, 10) + '.csv';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    showToast('Reporte descargado 📥', 'success');
-  }
-
-  // ── Public refresh ─────────────────────────────────────────────────────────
-  function refresh() {
-    renderStats();
-    renderChart();
+      await renderCharts(list, period);
+    } catch (e) { console.warn('Dashboard:', e.message); }
   }
 
   function setText(id, val) {
@@ -291,5 +74,110 @@ const Dashboard = (() => {
     if (el) el.textContent = val;
   }
 
-  return { init, refresh };
+  function renderLowStock(prods) {
+    const el = document.getElementById('lowStockList');
+    if (!el) return;
+    if (!prods.length) { el.innerHTML = '<li class="list-group-item text-muted small">Sin stock bajo</li>'; return; }
+    el.innerHTML = prods.map(p => `<li class="list-group-item d-flex justify-content-between align-items-center small">
+      <span><i class="bi bi-box-seam me-2 text-warning"></i>${p.name}</span>
+      <span class="badge bg-danger rounded-pill">${p.stock}</span>
+    </li>`).join('');
+  }
+
+  async function renderCharts(orders, p) {
+    if (!window.Chart) {
+      await loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
+    }
+    const { labels, salesData, ordersData } = buildChartData(orders, p);
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--bs-primary').trim() || '#f97316';
+
+    const salesCanvas = document.getElementById('salesChart');
+    if (salesCanvas) {
+      if (salesChart) salesChart.destroy();
+      salesChart = new Chart(salesCanvas, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: `Ventas (${APP_CONFIG.currency})`, data: salesData, backgroundColor: '#f9731688', borderColor: '#f97316', borderWidth: 2, borderRadius: 4 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+          scales: { x: { ticks: { color: '#9898b0' }, grid: { color: '#ffffff11' } }, y: { ticks: { color: '#9898b0', callback: v => `${APP_CONFIG.currency}${v}` }, grid: { color: '#ffffff11' }, beginAtZero: true } }
+        }
+      });
+    }
+
+    const ordersCanvas = document.getElementById('ordersChart');
+    if (ordersCanvas) {
+      if (ordersChart) ordersChart.destroy();
+      ordersChart = new Chart(ordersCanvas, {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Pedidos', data: ordersData, borderColor: '#06b6d4', backgroundColor: '#06b6d422', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.3 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+          scales: { x: { ticks: { color: '#9898b0' }, grid: { color: '#ffffff11' } }, y: { ticks: { color: '#9898b0', stepSize: 1 }, grid: { color: '#ffffff11' }, beginAtZero: true } }
+        }
+      });
+    }
+  }
+
+  function buildChartData(orders, p) {
+    const now = new Date();
+    let labels = [], salesMap = {}, ordersMap = {};
+
+    if (p === 'day') {
+      for (let h = 0; h < 24; h++) { const l = `${String(h).padStart(2, '0')}h`; labels.push(l); salesMap[l] = 0; ordersMap[l] = 0; }
+      orders.forEach(o => {
+        const t = o.createdAt?.toDate?.() || new Date(0);
+        const k = `${String(t.getHours()).padStart(2, '0')}h`;
+        if (salesMap[k] !== undefined && o.status !== 'rejected') { salesMap[k] += o.total || 0; ordersMap[k]++; }
+      });
+    } else if (p === 'week') {
+      const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+      for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(now.getDate() - i); const l = days[(d.getDay() + 6) % 7]; labels.push(l); salesMap[l] = 0; ordersMap[l] = 0; }
+      orders.forEach(o => {
+        const t = o.createdAt?.toDate?.() || new Date(0);
+        const l = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][(t.getDay() + 6) % 7];
+        if (salesMap[l] !== undefined && o.status !== 'rejected') { salesMap[l] += o.total || 0; ordersMap[l]++; }
+      });
+    } else {
+      const dm = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      for (let d = 1; d <= dm; d++) { const l = `${d}`; labels.push(l); salesMap[l] = 0; ordersMap[l] = 0; }
+      orders.forEach(o => {
+        const t = o.createdAt?.toDate?.() || new Date(0);
+        const l = `${t.getDate()}`;
+        if (salesMap[l] !== undefined && o.status !== 'rejected') { salesMap[l] += o.total || 0; ordersMap[l]++; }
+      });
+    }
+    return { labels, salesData: labels.map(l => +(salesMap[l] || 0).toFixed(2)), ordersData: labels.map(l => ordersMap[l] || 0) };
+  }
+
+  async function dlExcel(p) {
+    if (!window.XLSX) await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    showToast('Generando Excel…', 'info');
+    try {
+      const snap = await db.collection(COLL.orders).get();
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = filterByPeriod(all, p);
+      const pNames = { day: 'Hoy', week: 'Semana', month: 'Mes' };
+      const statusLb = { pending: 'Pendiente', done: 'Completado', rejected: 'Rechazado' };
+      const headers = ['ID', 'Cliente', 'Teléfono', 'Productos', 'Total', 'Estado', 'Fecha'];
+      const rows = list.map(o => [
+        o.id.slice(-8), o.customer || '', o.customerPhone || '',
+        (o.items || []).map(i => `${i.name} x${i.qty}`).join(' | '),
+        o.total || 0, statusLb[o.status] || o.status,
+        o.createdAt?.toDate ? o.createdAt.toDate().toLocaleString('es-PE') : ''
+      ]);
+      const revenue = list.filter(o => o.status !== 'rejected').reduce((s, o) => s + (o.total || 0), 0);
+      const summary = [['Período', pNames[p] || p], ['Pedidos', list.length], ['Ingresos', revenue.toFixed(2)], ['Completados', list.filter(o => o.status === 'done').length]];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), 'Pedidos');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), 'Resumen');
+      XLSX.writeFile(wb, `kiosco-${p}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      showToast('Excel descargado ✓', 'success');
+    } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+  }
+
+  function loadScript(src) {
+    return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  }
+
+  return { init };
 })();

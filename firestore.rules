@@ -1,57 +1,12 @@
-// firestore.rules
-// Reglas de seguridad para Kiosco PWA
-// Despliega con: firebase deploy --only firestore:rules
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ── Helpers ────────────────────────────────────────────────────────────
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isAdmin() {
-      // El admin es el único usuario autenticado con número de teléfono
-      // (solo ese número puede autenticarse gracias a la lógica del cliente)
-      return isAuthenticated() && request.auth.token.phone_number != null;
-    }
-
-    // ── Config (número admin) ──────────────────────────────────────────────
-    // Lectura pública para verificar si el usuario es admin
-    // Escritura solo desde Firebase Console (nunca desde el cliente)
-    match /config/{docId} {
-      allow read: if true;
-      allow write: if false; // Solo desde Firebase Console
-    }
-
-    // ── Productos ──────────────────────────────────────────────────────────
-    // Cualquiera puede ver productos activos
-    // Solo admin puede crear/editar/eliminar
-    match /products/{productId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
-    }
-
-    // ── Categorías ─────────────────────────────────────────────────────────
-    match /categories/{categoryId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
-    }
-
-    // ── Pedidos ────────────────────────────────────────────────────────────
-    // Cualquier visitante puede crear un pedido (sin cuenta)
-    // Solo admin puede leer todos los pedidos y cambiar estado
-    match /orders/{orderId} {
-      allow create: if
-        request.resource.data.keys().hasAll(['items', 'total', 'status', 'createdAt']) &&
-        request.resource.data.status == 'pending' &&
-        request.resource.data.total is number &&
-        request.resource.data.total > 0 &&
-        request.resource.data.items is list &&
-        request.resource.data.items.size() > 0;
-
-      allow read, update, delete: if isAdmin();
-    }
+    match /config/{d}    { allow read: if true; allow write: if request.auth != null; }
+    match /products/{id} { allow read: if true; allow write: if request.auth != null; }
+    match /categories/{id}{ allow read: if true; allow write: if request.auth != null; }
+    match /orders/{id}   { allow create: if true; allow read: if true; allow update,delete: if request.auth != null; }
+    match /chats/{id}           { allow read,write: if true; }
+    match /chats/{id}/messages/{m}{ allow read,write: if true; }
+    match /audit_log/{id}       { allow read,write: if request.auth != null; }
   }
 }
