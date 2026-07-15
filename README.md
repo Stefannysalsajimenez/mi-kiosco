@@ -14,60 +14,36 @@
 
 ---
 
-## ✨ Funcionalidades
+## ✨ Características principales
+ 
+### 🏪 Tienda pública (Cliente)
+- Catálogo de productos con imágenes, precios, stock y categorías en tiempo real
+- Filtrado por categorías y subcategorías
+- Búsqueda de productos en tiempo real
+- Carrito de compras con control de cantidades
+- Modal de pedido con opciones de entrega (recojo / delivery)
+- Selección de fecha y hora de entrega (hasta 3 días)
+- Captura de ubicación GPS para delivery
+- Historial de pedidos por cliente
+- Modo oscuro / claro
 
-### Para clientes (público)
-- 🗂️ Navegación por categorías y subcategorías en tiempo real
-- 🔍 Buscador de productos instantáneo
-- 🛒 Carrito de compras persistente
-- 📤 Compartir pedido por WhatsApp (texto o recibo PDF)
-- 📱 Instalable como app en celular y computadora (PWA)
+### 👤 Panel de administración
+- **Dashboard:** estadísticas de ingresos, pedidos, ventas y stock bajo con gráficos Chart.js
+- **Pedidos:** gestión en tiempo real con cambio de estado, boleta y eliminación
+- **Productos:** CRUD completo con imagen, precio, stock, categoría y estado
+- **Categorías:** CRUD con soporte para subcategorías
+- **Caja diaria:** apertura y cierre con resumen de ventas del día
+- **Horario:** configuración de días y horas de atención
+- **Personal:** gestión de empleados con roles
+- **Apariencia:** nombre, logo, color principal y tiempo estimado de entrega
+- Exportación a Excel (Hoy / Semana / Mes)
+- Registro de auditoría de cambios
 
-### Para el administrador
-- 🔐 Login seguro por número de teléfono peruano (+51), sin contraseña
-- 📊 Dashboard con ventas del día, semana y mes
-- 📈 Gráfico en tiempo real (ventas + pedidos)
-- 📋 Gestión de pedidos: Pendiente → Hecho / Rechazado
-- 🔔 Notificación instantánea de nuevos pedidos
-- 🏷️ CRUD completo de productos con vista previa de imagen
-- 📂 Categorías y subcategorías ilimitadas
-- 📥 Descarga de reportes en CSV
-
----
-
-## 🗂️ Estructura del proyecto
-
-```
-kiosco/
-├── index.html              # App principal
-├── offline.html            # Página sin conexión
-├── manifest.json           # Config PWA
-├── sw.js                   # Service Worker
-├── firebase.json           # Config Firebase Hosting
-├── firestore.rules         # Reglas de seguridad
-├── firestore.indexes.json  # Índices de consultas
-│
-├── css/
-│   ├── variables.css       # Tokens de diseño + tema claro/oscuro
-│   ├── main.css            # Layout principal y responsive
-│   ├── components.css      # Botones, cards, modales, carrito
-│   ├── animations.css      # Animaciones y micro-interacciones
-│   └── extras.css          # Notificaciones, PWA banner, print
-│
-└── js/
-    ├── config.js           # 🔐 Credenciales Firebase (NO subir a GitHub)
-    ├── firebase.js         # Inicialización Firebase
-    ├── auth.js             # Autenticación por teléfono (multi-admin)
-    ├── store.js            # Tienda pública en tiempo real
-    ├── cart.js             # Carrito de compras
-    ├── admin.js            # Panel de administración
-    ├── dashboard.js        # Estadísticas y gráfico
-    ├── orders.js           # Gestión de pedidos
-    ├── notifications.js    # Alertas de nuevos pedidos
-    ├── share.js            # Compartir por WhatsApp
-    ├── ui-helpers.js       # Utilidades UI
-    └── app.js              # Orquestador principal
-```
+### 📱 PWA
+- Instalable en Android, iOS, Windows y macOS
+- Funciona offline con Service Worker
+- Íconos adaptativos en todos los tamaños
+- Actualizaciones automáticas sin Ctrl+F5
 
 ---
 
@@ -76,6 +52,8 @@ kiosco/
 ### Requisitos
 - Node.js v20 o superior
 - Cuenta de Firebase (plan Spark gratuito)
+- Firebase CLI (`npm install -g firebase-tools`)
+- Proyecto Firebase con **Firestore** y **Phone Authentication** habilitados
 
 ### Pasos
 
@@ -159,24 +137,50 @@ orders/{id}           → customer, items[], total, status, createdAt
 
 ## 🛠️ Tecnologías usadas
 
-| Tecnología | Uso |
-|---|---|
-| HTML5 / CSS3 / JS vanilla | Frontend sin frameworks |
-| Firebase Firestore | Base de datos en tiempo real |
-| Firebase Authentication | Login por teléfono |
-| Firebase Hosting | Despliegue web |
-| Chart.js | Gráfico del dashboard |
-| Service Worker | Soporte offline (PWA) |
-| WhatsApp API | Compartir pedidos |
+| Tecnología | Versión | Uso |
+|------------|---------|-----|
+| Firebase Firestore | 10.7.x | Base de datos en tiempo real |
+| Firebase Auth | 10.7.x | Autenticación por teléfono (admin) |
+| Firebase Hosting | — | Despliegue y CDN |
+| Bootstrap | 5.3.3 | UI, modales, grid, formularios |
+| Bootstrap Icons | 1.11.3 | Iconografía |
+| Chart.js | 4.4.0 | Gráficos del dashboard |
+| SheetJS (xlsx) | 0.18.5 | Exportación a Excel |
+| Service Worker | v12 | Caché, offline, PWA |
+
+## 📱 PWA — Instalación
+ 
+La app se puede instalar directamente desde el navegador:
+ 
+- **Chrome/Edge (escritorio):** botón "Instalar" en la barra de navegación
+- **Android:** Chrome → menú → "Añadir a pantalla de inicio"
+- **iOS:** Safari → compartir → "Añadir a pantalla de inicio"
 
 ---
-
-## 📱 Instalar como app
-
-**Android (Chrome):** Menú → "Agregar a pantalla de inicio"  
-**iOS (Safari):** Compartir → "Agregar a pantalla de inicio"  
-**PC (Chrome/Edge):** Ícono 📲 en la barra de dirección
-
+ 
+## 🔄 Flujo de la aplicación
+ 
+```
+Inicio
+  ├── Botón 👤 → Modal de acceso
+  │     ├── "Soy Cliente" → Ingresa nombre → Tienda
+  │     └── "Administrador" → Teléfono + SMS → Panel admin
+  │
+  ├── TIENDA
+  │     ├── Ver categorías / buscar productos
+  │     ├── Agregar al carrito
+  │     └── Enviar pedido (con fecha, hora, GPS, notas)
+  │
+  └── ADMIN
+        ├── Dashboard (métricas + gráficos + Excel)
+        ├── Pedidos (tiempo real + estado + boleta)
+        ├── Productos (CRUD + imagen + stock)
+        ├── Categorías (CRUD + subcategorías)
+        ├── Caja (apertura/cierre + resumen)
+        ├── Horario (días y horas de atención)
+        ├── Personal (empleados + roles)
+        └── Apariencia (nombre, logo, color, ETA)
+```
 ---
 
 ## 📄 Licencia
