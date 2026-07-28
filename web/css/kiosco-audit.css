@@ -1,0 +1,46 @@
+/* KIOSCO_AUDIT: interfaz de auditoría */
+#sec-auditoria .audit-summary-card {
+  min-height: 92px;
+}
+
+#sec-auditoria .audit-summary-card .audit-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+#sec-auditoria .audit-table td,
+#sec-auditoria .audit-table th {
+  vertical-align: middle;
+}
+
+#sec-auditoria .audit-detail {
+  min-width: 260px;
+  max-width: 520px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#sec-auditoria .audit-person {
+  min-width: 160px;
+}
+
+#sec-auditoria .audit-empty {
+  min-height: 220px;
+}
+
+@media (max-width: 767.98px) {
+  #sec-auditoria .audit-toolbar {
+    align-items: stretch !important;
+  }
+
+  #sec-auditoria .audit-toolbar .btn-group,
+  #sec-auditoria .audit-toolbar .audit-actions,
+  #sec-auditoria .audit-toolbar .audit-actions .btn {
+    width: 100%;
+  }
+
+  #sec-auditoria .audit-toolbar .btn-group .btn {
+    flex: 1 1 0;
+  }
+}

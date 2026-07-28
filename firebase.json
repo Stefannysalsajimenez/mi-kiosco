@@ -4,11 +4,24 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": ".",
+    "public": "web",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "kiosco-api/**",
+      "kiosco-app/**",
+      "docs/**",
+      "scripts/**",
+      "web-upgrade/**",
+      "package.json",
+      "package-lock.json",
+      "README.md",
+      "MANIFEST.txt",
+      "CHECKSUMS.sha256",
+      "firestore.rules",
+      "firestore.indexes.json",
+      "storage.rules"
     ],
     "rewrites": [
       {

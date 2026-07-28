@@ -1,0 +1,13 @@
+{
+  "name": "kiosco-mejoras-finales",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node scripts/verify-package.mjs",
+    "apply": "node scripts/apply-final-improvements.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

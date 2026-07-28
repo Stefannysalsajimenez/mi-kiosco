@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Kiosco",
+    "slug": "kiosco-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0f1115",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "package": "com.kiosco.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#f97316"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.kiosco.app",
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
+  }
+}

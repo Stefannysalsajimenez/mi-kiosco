@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = 'v2.0';
+const APP_VERSION = 'kiosco-auditoria-1';
 const CACHE_PREFIX = 'kiosco';
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${APP_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-${APP_VERSION}`;
@@ -23,7 +23,14 @@ const APP_SHELL = [
   '/js/app.js',
   '/icons/favicon.png',
   '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icons/icon-512.png',
+  '/css/kiosco-receipts-appearance.css',
+  '/js/kiosco-upgrade-config.js',
+  '/js/kiosco-receipts-appearance.js',
+  '/css/kiosco-final-improvements.css',
+  '/js/kiosco-final-improvements.js',
+  '/css/kiosco-audit.css',
+  '/js/kiosco-audit.js'
 ];
 
 const NETWORK_ONLY_HOSTS = [

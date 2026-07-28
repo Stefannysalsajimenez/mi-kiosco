@@ -1,0 +1,22 @@
+{
+  "name": "kiosco-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend serverless gratuito para Kiosco",
+  "main": "api/notify.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "check": "node --check api/notify.js && node --check api/whatsapp.js && node --check api/stats.js && node --check api/boleta.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0",
+    "pdfkit": "^0.17.2",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "vercel": "^46.1.1"
+  }
+}

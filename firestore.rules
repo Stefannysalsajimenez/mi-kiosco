@@ -5,6 +5,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.phone_number != null
+        && exists(/databases/$(database)/documents/config/admin)
+        && get(/databases/$(database)/documents/config/admin).data.phones is list
+        && request.auth.token.phone_number in get(/databases/$(database)/documents/config/admin).data.phones;
+    }
+
     function isStockOnlyDecrease() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt'])
         && resource.data.stock is int
@@ -23,9 +31,11 @@ service cloud.firestore {
         && request.resource.data.status == 'pending';
     }
 
-    match /config/{documentId} {
+    match /config/{docId} {
+      // Lectura pública usada por tienda, Expo y validación del teléfono admin.
       allow read: if true;
-      allow write: if isAuthenticated();
+      // Apariencia, pagos, FCM y datos de recibo: solo administrador.
+      allow write: if isAdmin();
     }
 
     match /products/{productId} {
@@ -53,8 +63,44 @@ service cloud.firestore {
       }
     }
 
-    match /audit_log/{documentId} {
-      allow read, write: if isAuthenticated();
+    match /audit_log/{auditId} {
+      // El historial es de solo lectura después de crearse.
+      allow create, read: if isAdmin();
+      allow update, delete: if false;
     }
+
+    // KIOSCO_FINAL:PAYMENT_PROOFS
+    match /paymentProofs/{orderId} {
+      function linkedOrder() {
+        return get(/databases/$(database)/documents/orders/$(orderId)).data;
+      }
+
+      // El cliente público solo puede crear una imagen comprimida para un pedido
+      // que acaba de registrar y que declaró esperar un comprobante.
+      allow create: if (isAdmin() || (
+          request.auth == null
+          && exists(/databases/$(database)/documents/orders/$(orderId))
+          && linkedOrder().paymentProofExpected == true
+          && linkedOrder().paymentMethod == request.resource.data.paymentMethod
+        ))
+        && request.resource.data.keys().hasOnly([
+          'orderId', 'paymentMethod', 'imageData', 'fileName',
+          'contentType', 'originalType', 'encodedLength', 'createdAt'
+        ])
+        && request.resource.data.orderId == orderId
+        && request.resource.data.paymentMethod in ['card', 'yape', 'plin']
+        && request.resource.data.imageData is string
+        && request.resource.data.imageData.size() > 100
+        && request.resource.data.imageData.size() <= 420000
+        && request.resource.data.fileName is string
+        && request.resource.data.fileName.size() <= 120
+        && request.resource.data.contentType is string
+        && request.resource.data.contentType.matches('image/.*')
+        && request.resource.data.encodedLength is int
+        && request.resource.data.encodedLength > 100
+        && request.resource.data.encodedLength <= 420000;
+      allow read, update, delete: if isAdmin();
+    }
+
   }
 }

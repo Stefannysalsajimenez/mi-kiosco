@@ -575,7 +575,13 @@ const Cart = (() => {
           total: Number(orderTotal.toFixed(2)),
           itemCount: orderItems.reduce((sum, item) => sum + item.qty, 0),
           status: 'pending',
-          notes: String(notes || '').trim() || null,
+          // KIOSCO_FINAL:CHECKOUT_EXTRAS
+          paymentMethod: window.KioscoFinalImprovements?.getCheckoutExtras?.().paymentMethod
+            || window.KioscoUpgrades?.getSelectedPaymentMethod?.()
+            || 'cash',
+          paymentGroup: window.KioscoFinalImprovements?.getCheckoutExtras?.().paymentGroup || null,
+          paymentProofExpected: Boolean(window.KioscoFinalImprovements?.getCheckoutExtras?.().paymentProofExpected),
+          notes: String(notes || '').trim().slice(0, 300) || null,
           deliveryType: deliveryType || 'pickup',
           deliveryAddress: String(address || '').trim() || null,
           scheduledDate: scheduledDate || null,

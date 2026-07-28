@@ -1,0 +1,26 @@
+.kiosk-category-input-group .form-select{min-width:0}
+.kiosk-category-input-group .btn{min-width:44px}
+.kiosk-payment-proof-preview{display:block;width:100%;max-width:260px;max-height:220px;object-fit:contain;border:1px solid var(--bs-border-color);border-radius:.75rem;background:#fff;padding:.35rem}
+.kiosk-receipt-filters .btn.active{background:var(--accent,#f97316);border-color:var(--accent,#f97316);color:#fff}
+.kiosk-proof-button{white-space:nowrap}
+.kiosk-print-receipt-page{background:#eef1f5;color:#111827;min-height:100vh;padding:24px}
+.kiosk-print-toolbar{max-width:960px;margin:0 auto 14px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.kiosk-print-sheet{max-width:960px;margin:0 auto;background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(15,23,42,.15);padding:34px}
+.kiosk-print-header{display:grid;grid-template-columns:90px 1fr 230px;gap:22px;align-items:start}
+.kiosk-print-logo{width:82px;height:82px;object-fit:contain;border-radius:12px}
+.kiosk-print-box{border:1.5px solid #111827;border-radius:12px;padding:16px;text-align:center;font-weight:700}
+.kiosk-print-meta{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:24px 0;font-size:14px}
+.kiosk-print-table{width:100%;border-collapse:collapse;font-size:13px}
+.kiosk-print-table th,.kiosk-print-table td{border:1px solid #d1d5db;padding:8px}
+.kiosk-print-table th{background:#f3f4f6;text-align:left}
+.kiosk-print-totals{margin-left:auto;width:min(100%,330px);margin-top:18px}
+.kiosk-print-total-row{display:flex;justify-content:space-between;padding:5px 0}
+.kiosk-print-grand{font-size:18px;font-weight:800;border-top:2px solid #111827;margin-top:4px;padding-top:10px}
+.kiosk-print-footer{margin-top:26px;font-size:12px;color:#4b5563;text-align:center}
+@media(max-width:700px){.kiosk-print-receipt-page{padding:0}.kiosk-print-sheet{border-radius:0;box-shadow:none;padding:18px}.kiosk-print-header{grid-template-columns:62px 1fr}.kiosk-print-logo{width:58px;height:58px}.kiosk-print-box{grid-column:1/-1}.kiosk-print-meta{grid-template-columns:115px 1fr;font-size:12px}.kiosk-print-table{font-size:11px}.kiosk-print-table th,.kiosk-print-table td{padding:6px}}
+@media print{.kiosk-print-toolbar{display:none!important}.kiosk-print-receipt-page{padding:0;background:#fff}.kiosk-print-sheet{box-shadow:none;border-radius:0;max-width:none;padding:0}.kiosk-print-footer{position:fixed;bottom:8mm;left:0;right:0}}
+.kiosk-payment-option{border:1px solid var(--bs-border-color);border-radius:.75rem;padding:.75rem;background:var(--bs-body-bg);cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease}
+.kiosk-payment-option:hover{border-color:var(--accent,#f97316)}
+.kiosk-payment-option:has(input:checked){border-color:var(--accent,#f97316);box-shadow:0 0 0 .2rem color-mix(in srgb,var(--accent,#f97316) 18%,transparent);background:color-mix(in srgb,var(--accent,#f97316) 8%,var(--bs-body-bg))}
+#kOrderNotesCounter{font-variant-numeric:tabular-nums}
+@media(max-width:575.98px){.kiosk-category-input-group .btn{min-width:48px}.kiosk-payment-proof-preview{max-width:100%}.kiosk-receipt-filters{width:100%}.kiosk-receipt-filters .btn{flex:1}}
