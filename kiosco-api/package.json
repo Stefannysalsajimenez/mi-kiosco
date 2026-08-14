@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vercel dev",
-    "check": "node --check api/notify.js && node --check api/whatsapp.js && node --check api/stats.js && node --check api/boleta.js"
+    "check": "node --check api/notify.js && node --check api/whatsapp.js && node --check api/stats.js && node --check api/boleta.js && node --check api/media.js"
   },
   "dependencies": {
     "firebase-admin": "^13.4.0",
