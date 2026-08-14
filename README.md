@@ -174,3 +174,114 @@ http://127.0.0.1:5000
 La imagen se comprime y se guarda en Firestore para mantener el flujo dentro del plan gratuito y evitar una carga pública abierta en Storage. Aun así, cualquier endpoint o colección que acepte contenido de clientes sin autenticación puede recibir abuso. Para una operación comercial sostenida se recomienda autenticar clientes o emitir un token de carga por pedido desde el backend.
 
 Los recibos locales son documentos comerciales informativos. La emisión electrónica real ante SUNAT requiere el flujo tributario autorizado, certificado digital y envío del comprobante electrónico correspondiente.
+
+<!-- KIOSCO_NINE_IMPROVEMENTS:README_START -->
+<!-- KIOSCO_NINE_IMPROVEMENTS:README_VERSION=2 -->
+## Mejoras de catálogo, gastos, inventario y analítica (2026-08)
+
+Esta versión incorpora nueve mejoras incrementales en el frontend Vanilla JavaScript, Bootstrap 5.3 y Firebase Spark. No agrega dependencias npm al frontend, no usa Cloud Functions y no requiere índices compuestos de Firestore. Las consultas nuevas no combinan `where()` con `orderBy()`; el filtrado y ordenamiento se ejecutan en memoria.
+
+| Mejora | Cobertura |
+|---|---|
+| 2 | Productos relacionados desde el array local. |
+| 4 | Compartir por WhatsApp y enlace `#producto-ID`. |
+| 6 | Gastos, resumen, gráfico, Excel, utilidad y reglas. |
+| 8 | Alertas, desactivación atómica, reposición y auditoría. |
+| 11 | Modal individual completo y compartible. |
+| 16 | Calendario de calor y pedidos por hora. |
+| 20 | Catálogo PDF A4 agrupado por categoría. |
+| 22 | Generación, descarga y escaneo QR. |
+| 25 | Plantilla, vista previa e importación Excel. |
+
+### Productos relacionados, detalle y enlaces compartibles
+
+- Las tarjetas de la tienda abren un modal de detalle con imagen, descripción completa, precio, categoría, subcategoría, indicador de stock, selector de cantidad y acciones de carrito.
+- La sección **También te puede interesar** usa exclusivamente el array de productos que `Store` ya mantiene en memoria. Prioriza hasta cuatro productos activos de la misma categoría; cuando no existen coincidencias, usa productos activos aleatorios.
+- Cada tarjeta y el modal incluyen compartir por WhatsApp mediante `https://wa.me/?text=...`.
+- Las URLs de producto usan el formato `https://mi-kiosco-c7313.web.app/#producto-ID`. Al abrir una URL de producto, la tienda restablece el filtro, desplaza la tarjeta al centro, aplica un resaltado temporal y abre el modal.
+- El modal utiliza `history.pushState`; al cerrarse elimina el hash sin recargar la aplicación.
+
+### Gastos y utilidad neta
+
+Se agregó la sección **Gastos** entre Caja y Horario. La colección `expenses` utiliza este esquema:
+
+```text
+expenses/{expenseId}
+  description: string
+  amount: number
+  category: "Mercadería" | "Servicios" | "Transporte" | "Personal" | "Otros"
+  date: timestamp
+  createdAt: timestamp
+```
+
+La sección ofrece alta, edición, eliminación, filtro mensual, tarjetas por categoría, total mensual, gráfico por día y exportación Excel con SheetJS. El Dashboard incorpora **Gastos del período** y **Utilidad neta**, calculada como ingresos no rechazados menos gastos del mismo período.
+
+Las reglas incluidas permiten leer y escribir gastos únicamente a usuarios autenticados:
+
+```text
+allow read, write: if request.auth != null;
+```
+
+### Inventario y reposición
+
+- La transacción existente del checkout calcula `nextStock` y, cuando llega a cero, escribe también `active: false` en la misma operación atómica. El proyecto ya descontaba el inventario al crear el pedido; no se vuelve a descontar al cambiar su estado para evitar una salida duplicada.
+- Productos administrativos muestran **Sin stock** en rojo intermitente para stock cero y **Stock bajo** en amarillo para cantidades de 1 a 5.
+- El Dashboard incluye productos con stock cero aunque hayan quedado inactivos y los diferencia visualmente de los productos con stock bajo.
+- **Reponer stock** suma una cantidad al valor actual, reactiva el producto y registra de forma atómica un documento en `audit_log` con `action`, `product`, `previousStock`, `addedQty`, `newStock`, `admin` y `createdAt`.
+
+### Mapa de calor de pedidos
+
+El Dashboard incluye la pestaña **Mapa de calor**:
+
+- Calendario mensual construido con HTML y CSS Grid. La intensidad representa 0, 1–3, 4–7 y 8 o más pedidos; cada día informa pedidos e ingresos mediante tooltip.
+- Gráfico Chart.js por hora para el período seleccionado previamente: Hoy, Semana o Mes.
+- Ambas visualizaciones usan el array de pedidos ya cargado por `Dashboard`; no crean otra consulta a Firestore.
+
+### Catálogo PDF
+
+En Productos, **Exportar catálogo PDF** genera un archivo A4 vertical llamado `catalogo-YYYY-MM-DD.pdf`. Incluye portada, logo y nombre de `config/theme`, fecha, total de productos, agrupación por categoría, tabla con imagen, nombre, descripción, categoría, precio y stock, además de pie y numeración. Las imágenes se convierten a base64 mediante canvas; si el servidor remoto no permite CORS o no existe imagen, se muestra el texto `Sin imagen`.
+
+### QR de producto y escáner
+
+- El modal de producto y las tarjetas administrativas generan un QR con la URL pública del producto mediante el bundle navegador `qrcode@1.5.1` servido por cdnjs y permiten descargarlo como PNG. Se usa esta versión porque los paquetes npm 1.5.2–1.5.4 no publicaron el directorio `build/` precompilado.
+- El header público incluye un escáner. Usa `BarcodeDetector` cuando el navegador lo soporta y `jsQR` desde CDN como alternativa. Requiere HTTPS y permiso de cámara.
+- Un QR válido navega al hash correspondiente, resalta la tarjeta y abre el modal de detalle.
+
+### Importación Excel
+
+**Importar desde Excel** permite:
+
+1. Descargar una plantilla SheetJS con las columnas `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `subcategoria`, `imageUrl` y `activo`.
+2. Cargar `.xlsx` o `.xls` y revisar las primeras cinco filas.
+3. Validar nombre, precio, stock, URL, estado y categorías sin realizar consultas adicionales; los IDs se resuelven desde el array local de `Admin`.
+4. Crear productos en grupos de diez promesas concurrentes y mostrar progreso, cantidad importada y errores por fila.
+
+`stock` vacío se guarda como ilimitado. `activo` acepta `SI` o `NO` y usa `SI` cuando queda vacío. Cada producto recibe `createdAt` y `updatedAt` con `serverTimestamp()`.
+
+### Archivos incorporados
+
+```text
+web/css/kiosco-nine-improvements.css
+web/js/kiosco-product-experience.js
+web/js/kiosco-admin-operations.js
+web/js/kiosco-dashboard-heatmap.js
+```
+
+También se actualizaron `web/index.html`, `web/js/firebase.js`, `web/js/cart.js`, `web/js/admin.js`, `web/js/dashboard.js`, `web/sw.js` y `firestore.rules`. El Service Worker cambia de versión para invalidar la caché anterior e incluye los nuevos recursos en el app shell.
+
+### Validación y despliegue
+
+```bash
+for file in web/js/*.js; do node --check "$file" || exit 1; done
+firebase deploy --only firestore:rules
+firebase deploy --only hosting
+```
+
+Para desplegar reglas y hosting en una sola operación:
+
+```bash
+firebase deploy --only firestore:rules,hosting
+```
+
+Después del despliegue, conviene cerrar y volver a abrir la PWA o aceptar la actualización del Service Worker para cargar la nueva versión del app shell.
+<!-- KIOSCO_NINE_IMPROVEMENTS:README_END -->

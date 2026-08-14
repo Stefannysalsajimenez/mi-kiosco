@@ -41,6 +41,8 @@ const Dashboard = (() => {
         button.classList.add('active');
         period = button.dataset.dashPeriod || 'day';
         renderStats();
+        // KIOSCO_NINE:DASHBOARD_PERIOD_EVENT
+        window.dispatchEvent(new CustomEvent('dashboard:period-changed', { detail: { period } }));
       });
     });
   }
@@ -83,6 +85,7 @@ const Dashboard = (() => {
         ...documentSnapshot.data()
       }));
       renderStats();
+      emitData();
     }, error => {
       console.warn('Dashboard pedidos:', error?.code || error);
       showToast('No se pudieron actualizar los pedidos del dashboard', 'warning');
@@ -94,6 +97,7 @@ const Dashboard = (() => {
         ...documentSnapshot.data()
       }));
       renderLowStockStats();
+      emitData();
     }, error => {
       console.warn('Dashboard productos:', error?.code || error);
     });
@@ -161,8 +165,9 @@ const Dashboard = (() => {
   function renderLowStockStats() {
     const lowStock = products.filter(product => {
       const stock = Number(product.stock);
-      return product.active !== false && Number.isFinite(stock) && stock <= 5;
-    });
+      return Number.isFinite(stock) && stock >= 0 && stock <= 5
+        && (product.active !== false || stock === 0);
+    }).sort((a, b) => Number(a.stock) - Number(b.stock));
 
     setText('dashLowStock', lowStock.length);
     renderLowStock(lowStock);
@@ -195,11 +200,15 @@ const Dashboard = (() => {
       return;
     }
 
-    element.innerHTML = list.map(product => `
-      <li class="list-group-item d-flex justify-content-between align-items-center small">
-        <span><i class="bi bi-box-seam me-2 text-warning"></i>${escapeHtml(product.name)}</span>
-        <span class="badge bg-danger rounded-pill">${Number(product.stock)}</span>
-      </li>`).join('');
+    element.innerHTML = list.map(product => {
+      const stock = Number(product.stock);
+      const outOfStock = stock === 0;
+      return `
+        <li class="list-group-item d-flex justify-content-between align-items-center small ${outOfStock ? 'kiosco-low-stock-out' : ''}">
+          <span><i class="bi bi-box-seam me-2 ${outOfStock ? 'text-danger' : 'text-warning'}"></i>${escapeHtml(product.name)}</span>
+          <span class="badge ${outOfStock ? 'bg-danger' : 'bg-warning text-dark'} rounded-pill">${outOfStock ? 'Sin stock' : stock}</span>
+        </li>`;
+    }).join('');
   }
 
   async function ensureChartLibrary() {
@@ -467,12 +476,25 @@ const Dashboard = (() => {
     });
   }
 
+  // KIOSCO_NINE:DASHBOARD_LOCAL_DATA
+  function getOrders() { return orders.map(order => ({ ...order })); }
+  function getProducts() { return products.map(product => ({ ...product })); }
+  function getPeriod() { return period; }
+  function emitData() {
+    window.dispatchEvent(new CustomEvent('dashboard:data-updated', {
+      detail: { orders: getOrders(), products: getProducts(), period }
+    }));
+  }
+
   return {
     init,
     refresh,
     getPeriodRange,
     filterByPeriod,
-    exportOrders
+    exportOrders,
+    getOrders,
+    getProducts,
+    getPeriod
   };
 })();
 

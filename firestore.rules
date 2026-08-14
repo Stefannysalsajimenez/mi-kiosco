@@ -14,11 +14,15 @@ service cloud.firestore {
     }
 
     function isStockOnlyDecrease() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt'])
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt', 'active'])
         && resource.data.stock is int
         && request.resource.data.stock is int
         && request.resource.data.stock >= 0
-        && request.resource.data.stock < resource.data.stock;
+        && request.resource.data.stock < resource.data.stock
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['active'])
+          || (request.resource.data.stock == 0 && request.resource.data.active == false)
+        );
     }
 
     function isValidOrder() {
@@ -53,6 +57,11 @@ service cloud.firestore {
       allow create: if isValidOrder();
       allow read: if true;
       allow update, delete: if isAuthenticated();
+    }
+
+    // KIOSCO_NINE:EXPENSES_RULES
+    match /expenses/{expenseId} {
+      allow read, write: if request.auth != null;
     }
 
     match /chats/{chatId} {

@@ -26,12 +26,16 @@ const Admin = (() => {
     unsubC = db.collection(COLL.categories).onSnapshot(snap => {
       cats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
       renderCategories(); populateCatSelect();
+      // KIOSCO_NINE:ADMIN_CATEGORIES_EVENT
+      window.dispatchEvent(new CustomEvent('admin:categories-updated', { detail: { categories: getCategories() } }));
     }, e => console.warn('cats:', e.code));
     unsubP = db.collection(COLL.products).onSnapshot(async snap => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       prods = await Promise.all(list.map(resolveProductImage));
       prods.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
       renderProducts();
+      // KIOSCO_NINE:ADMIN_PRODUCTS_EVENT
+      window.dispatchEvent(new CustomEvent('admin:products-updated', { detail: { products: getProducts() } }));
     }, e => console.warn('prods:', e.code));
   }
 
@@ -84,7 +88,7 @@ const Admin = (() => {
       const unit = product.unit || 'Unidad';
       const discount = Number(product.discountPercent || 0);
       return `
-        <div class="col-sm-6 col-md-4 col-xl-3">
+        <div class="col-sm-6 col-md-4 col-xl-3" data-admin-product-id="${esc(product.id)}">
           <div class="card h-100 ${product.active === false ? 'opacity-50' : ''}">
             <div class="card-img-wrap" style="height:140px;overflow:hidden">
               ${imageUrl
@@ -644,5 +648,9 @@ const Admin = (() => {
 
   function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#039;'); }
 
-  return { init, editProduct, deleteProduct, editCat, deleteCat, removeStaff };
+  // KIOSCO_NINE:ADMIN_LOCAL_DATA
+  function getProducts() { return prods.map(product => ({ ...product })); }
+  function getCategories() { return cats.map(category => ({ ...category })); }
+
+  return { init, editProduct, deleteProduct, editCat, deleteCat, removeStaff, getProducts, getCategories };
 })();

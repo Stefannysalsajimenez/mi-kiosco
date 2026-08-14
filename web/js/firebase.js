@@ -17,7 +17,8 @@
       orders: 'orders',
       config: 'config',
       chats: 'chats',
-      audit: 'audit_log'
+      audit: 'audit_log',
+      expenses: 'expenses' // KIOSCO_NINE:EXPENSES_COLLECTION
     };
     window.FS = firebase.firestore;
 

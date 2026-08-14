@@ -15,3 +15,8 @@ npm-audit-force.diff
 .env.*
 Thumbs.db
 !.env.example
+
+# Local logs
+firebase-debug.log
+firebase-debug.*.log
+*.log

@@ -560,10 +560,14 @@ const Cart = (() => {
           });
 
           if (currentStock !== null) {
-            transaction.update(productReference, {
-              stock: currentStock - item.qty,
+            const nextStock = currentStock - item.qty;
+            // KIOSCO_NINE:ATOMIC_STOCK_DEACTIVATION
+            const stockUpdate = {
+              stock: nextStock,
               updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            };
+            if (nextStock === 0) stockUpdate.active = false;
+            transaction.update(productReference, stockUpdate);
           }
         }
 
