@@ -1,287 +1,287 @@
-# Kiosco — mejoras finales de categorías, recibos y pagos
+# Kiosco — tienda digital y panel de administración
 
-Este paquete es incremental. Debe aplicarse después de las mejoras anteriores de backend, Expo responsive, apariencia y recibos.
+Kiosco es una solución de venta digital pensada para un negocio minorista peruano. Permite que una persona vea productos, arme un pedido y lo envíe desde una interfaz web o móvil. Al mismo tiempo, el propietario o administrador dispone de un panel para gestionar el catálogo, pedidos, caja, horarios, personal, recibos, auditoría y apariencia del negocio.
 
-## Alcance
+Sitio web actual: `https://mi-kiosco-c7313.web.app`
 
-### Categorías y subcategorías desde el producto
+## ¿Qué problema resuelve?
 
-- Agrega un botón `+` al lado de **Categoría** y **Subcategoría** en el modal de productos.
-- Permite crear la categoría sin salir del producto.
-- La subcategoría exige seleccionar primero una categoría principal.
-- Firestore actualiza los selectores mediante el `onSnapshot` existente.
-- La nueva opción queda seleccionada automáticamente.
+Kiosco concentra en un solo sistema las tareas más comunes de una tienda pequeña:
 
-### Recibos visibles sin depender obligatoriamente de Vercel
+- mostrar un catálogo de productos;
+- buscar y filtrar por categorías;
+- agregar productos al carrito;
+- registrar y administrar pedidos;
+- controlar productos, precios, stock y descuentos;
+- revisar indicadores de venta;
+- gestionar caja, horario y personal;
+- generar recibos informativos;
+- revisar auditoría de acciones;
+- personalizar nombre, logotipo y colores;
+- funcionar como PWA para una experiencia similar a una aplicación instalada.
 
-- Agrega filtros **Hoy**, **Semana** y **Mes**.
-- Permite **Emitir**, **Ver**, **Imprimir** y copiar el enlace público.
-- Evita emitir recibos de pedidos rechazados.
-- Si `apiBaseUrl` está configurado, abre el PDF generado por `/api/boleta`.
-- Si `apiBaseUrl` no está configurado, reserva el correlativo con una transacción de Firestore y abre una representación imprimible servida por Firebase Hosting.
-- El cliente puede abrir el enlace desde la web o Expo y usar **Imprimir / guardar PDF**.
-- El formato mantiene los datos comerciales, detalle, subtotal, IGV, total y método de pago. Es una representación informativa; no reemplaza un comprobante electrónico validado por SUNAT.
+## ¿Qué es cada parte del proyecto?
 
-### Confirmación de pedido y comprobante de pago
+| Carpeta o servicio | Para qué sirve |
+| --- | --- |
+| `web/` | Tienda pública y panel de administración. Está construida con HTML, CSS, JavaScript Vanilla y Bootstrap 5. |
+| `kiosco-api/` | Backend serverless. Protege operaciones administrativas y genera funciones que no deben ejecutarse directamente en el navegador. |
+| `kiosco-app/` | Aplicación móvil construida con React Native y Expo. |
+| `docs/` | Documentación y material complementario del proyecto. |
+| Firebase Auth | Autenticación de usuarios y administradores. |
+| Firestore | Base de datos para productos, categorías, pedidos, configuración y demás información operativa. |
+| Firebase Hosting | Publicación de la aplicación web/PWA. |
+| Cloudinary | Almacenamiento externo de las imágenes nuevas del catálogo de productos. Las imágenes ya no se suben a Firebase Storage. |
 
-- Opciones visibles: **Efectivo**, **Tarjeta** y **Billetera digital**.
-- Para billetera digital se selecciona **Yape** o **Plin**.
-- Tarjeta, Yape y Plin requieren adjuntar una imagen del pago.
-- La imagen se comprime antes de guardarse y se almacena en `paymentProofs/{orderId}`.
-- Solo el administrador puede leer comprobantes de pago.
-- La sección Recibos permite abrir, descargar e imprimir la imagen del pago.
-- Notas limitadas a 300 caracteres, con contador visible.
+## Funciones principales
 
-### Expo
+### Para el cliente
 
-- Selector de imagen mediante `expo-image-picker`.
-- Vista previa y opción para quitar o reemplazar la imagen.
-- La imagen se envía después de crear el pedido.
-- El enlace del recibo usa Vercel si está configurado; en caso contrario usa Firebase Hosting.
+- catálogo responsive;
+- búsqueda de productos;
+- categorías y subcategorías;
+- detalle del producto;
+- carrito de compra;
+- cantidades y validación de stock;
+- envío de pedidos;
+- modo claro y oscuro;
+- PWA instalable;
+- experiencia adaptada a PC, laptop, tablet y celular.
 
-## Aplicación
+### Para administración
 
-Desde la carpeta descomprimida:
+- Dashboard;
+- Pedidos;
+- Productos;
+- Categorías;
+- Caja;
+- Horario;
+- Personal;
+- Auditoría;
+- Recibos;
+- Apariencia;
+- exportaciones y reportes donde corresponda.
+
+## Diseño responsive
+
+La navegación móvil no depende de un icono de hamburguesa:
+
+- en la tienda, las categorías se muestran como una barra horizontal desplazable;
+- en administración, las secciones se muestran como una barra horizontal desplazable;
+- el carrito conserva su acceso móvil;
+- las tarjetas mantienen dos columnas en teléfonos normales y una columna en pantallas extremadamente angostas;
+- los modales se adaptan a desktop, tablet y celular; en teléfonos usan el alto disponible para evitar formularios comprimidos;
+- el icono flotante de WhatsApp se elimina de las tarjetas de producto. La función de compartir el carrito se mantiene.
+
+## Imágenes de productos
+
+Las imágenes nuevas de productos se almacenan en Cloudinary y no en Firebase Storage.
+
+El flujo es:
+
+1. El administrador elige una imagen desde el formulario del producto.
+2. El navegador pide al backend `/api/media` una firma temporal.
+3. El archivo se carga directamente a Cloudinary.
+4. Cloudinary guarda el original dentro de `kiosco/productos/<ID_DEL_PRODUCTO>/`.
+5. Firestore guarda únicamente la URL pública y un identificador de la imagen.
+6. Al reemplazar o eliminar un producto, el backend solicita la eliminación de la imagen correspondiente.
+
+El sistema mantiene compatibilidad con imágenes antiguas que ya estuvieran en Firebase Storage. No es necesario migrarlas para publicar esta mejora.
+
+### Formatos
+
+El selector acepta imágenes que el navegador identifique como `image/*` y formatos comunes como JPG, JPEG, PNG, WEBP, GIF, SVG, AVIF, BMP, HEIC, HEIF, TIFF e ICO. La validación final la realiza Cloudinary según los formatos admitidos por su plataforma.
+
+Para el plan gratuito se limita cada imagen a 10 MB.
+
+## Tecnologías
+
+- HTML5
+- CSS3
+- JavaScript Vanilla
+- Bootstrap 5.3
+- Bootstrap Icons
+- Firebase Auth
+- Firebase Firestore
+- Firebase Hosting
+- Firebase PWA / Service Worker
+- Cloudinary para imágenes de catálogo
+- Node.js 20+
+- Vercel Functions para el backend existente
+- React Native + Expo para `kiosco-app/`
+- Chart.js
+- SheetJS
+- jsPDF
+
+No es necesario convertir el frontend web a TypeScript o TSX para estas mejoras. Se conserva JavaScript Vanilla porque es el patrón actual de `web/`.
+
+## Estructura general
+
+```text
+mi-kiosco/
+├── web/                   # Tienda, panel admin y PWA
+│   ├── css/
+│   ├── icons/
+│   ├── js/
+│   ├── index.html
+│   └── sw.js
+├── kiosco-api/            # Backend serverless
+│   ├── api/
+│   │   └── _lib/
+│   └── .env.example
+├── kiosco-app/            # App móvil Expo
+├── docs/                  # Documentación
+├── scripts/               # Utilidades del repositorio
+├── firebase.json
+├── firestore.rules
+└── README.md
+```
+
+## Requisitos para desarrollo
+
+- Node.js 20 o superior para `kiosco-api/`;
+- npm;
+- Firebase CLI para publicar el frontend y las reglas;
+- una cuenta Firebase correspondiente al proyecto;
+- una cuenta Cloudinary para las imágenes nuevas;
+- acceso al despliegue del backend configurado en `kiosco-api/`.
+
+## Configuración de Cloudinary
+
+Crear una cuenta de Cloudinary y obtener en el panel:
+
+- Cloud name;
+- API key;
+- API secret.
+
+En el backend, agregar estas variables de entorno:
+
+```env
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+CLOUDINARY_ASSET_FOLDER=kiosco/productos
+```
+
+`CLOUDINARY_API_SECRET` es un secreto de servidor. Nunca debe copiarse en `web/js/`, en Firestore ni en un archivo publicado por Firebase Hosting.
+
+En `web/js/kiosco-upgrade-config.js`, configurar el origen del backend:
+
+```js
+window.KIOSCO_UPGRADE_CONFIG = Object.freeze({
+  apiBaseUrl: '',
+  mediaApiBaseUrl: 'https://TU-BACKEND.vercel.app',
+  firebaseVapidKey: '',
+  enableCallMeBot: false,
+  storeUrl: 'https://mi-kiosco-c7313.web.app'
+});
+```
+
+`mediaApiBaseUrl` puede apuntar al mismo backend usado por `apiBaseUrl`. Se separa para que las imágenes puedan habilitarse sin obligar a activar otras funciones opcionales.
+
+## Configuración del backend
+
+El archivo `kiosco-api/.env.example` contiene las variables que deben configurarse en el entorno de despliegue.
+
+Además de Cloudinary, el backend requiere la configuración existente de Firebase Admin y los UID autorizados:
+
+```env
+ADMIN_UIDS=
+ALLOWED_ORIGINS=https://mi-kiosco-c7313.web.app,https://mi-kiosco-c7313.firebaseapp.com
+```
+
+El endpoint de imágenes exige un Firebase ID Token válido y privilegios de administrador. El navegador nunca recibe el API secret de Cloudinary.
+
+## Desarrollo local
+
+Desde la raíz:
 
 ```bash
 npm install
 npm run verify
-
-node scripts/apply-final-improvements.mjs \
-  ~/OneDrive/Escritorio/kiosco-pwa/mi-kiosco
 ```
 
-El instalador también amplía `firebase.json` para que Firebase Hosting no publique `kiosco-api`, `kiosco-app`, documentación, scripts, reglas ni archivos de npm cuando el directorio público sea `.`.
-
-El instalador crea un respaldo:
-
-```text
-.kiosco-final-backup-AAAA-MM-DDTHH-MM-SS
-```
-
-También puede revisarse sin escribir archivos:
+Para comprobar el backend:
 
 ```bash
-node scripts/apply-final-improvements.mjs \
-  ~/OneDrive/Escritorio/kiosco-pwa/mi-kiosco \
-  --dry-run
+cd kiosco-api
+npm install
+npm run check
+npm run dev
 ```
 
-## Dependencia de Expo
+Para servir el frontend puede usarse Firebase CLI o cualquier servidor HTTP estático local. Evitar abrir `web/index.html` directamente con `file://`, porque varias funciones PWA y de red requieren HTTP/HTTPS.
 
-Instalar la versión compatible con el SDK actual:
+## Publicación
 
-```bash
-cd ~/OneDrive/Escritorio/kiosco-pwa/mi-kiosco/kiosco-app
-npx expo install expo-image-picker
-npx expo-doctor
-npx expo start --clear
-```
+### Frontend
 
-No usar `npm audit fix --force`, porque puede cambiar React Native o Expo a versiones incompatibles.
-
-## Configuración de Expo
-
-En `kiosco-app/.env` debe existir:
-
-```env
-EXPO_PUBLIC_KIOSCO_STORE_URL=https://mi-kiosco-c7313.web.app
-```
-
-`EXPO_PUBLIC_KIOSCO_API_URL` puede mantenerse con el valor de reemplazo mientras no se use el backend PDF. El recibo imprimible seguirá funcionando mediante Firebase Hosting.
-
-## Reglas de Firestore
-
-El instalador agrega reglas para `paymentProofs`. Antes de desplegar:
-
-```bash
-cd ~/OneDrive/Escritorio/kiosco-pwa/mi-kiosco
-git diff -- firestore.rules
-```
-
-Luego desplegar únicamente las reglas:
+Desde la raíz del proyecto:
 
 ```bash
 npx firebase-tools login
-npx firebase-tools deploy --only firestore:rules
-```
-
-La escritura pública del comprobante está limitada a:
-
-- pedidos existentes;
-- pedidos que indiquen `paymentProofExpected == true`;
-- el mismo método de pago registrado en el pedido;
-- imágenes comprimidas de hasta 420 000 caracteres;
-- una creación por documento de pedido.
-
-La lectura, modificación y eliminación quedan restringidas al administrador.
-
-## Publicación de Hosting
-
-Después de completar todas las pruebas locales, revise primero el cambio de exclusiones:
-
-```bash
-git diff -- firebase.json
-```
-
-Cuando el resultado sea correcto, publique la web:
-
-```bash
 npx firebase-tools deploy --only hosting
 ```
 
-## Hosting local
+Si también se modificaron reglas de Firestore:
 
 ```bash
-cd ~/OneDrive/Escritorio/kiosco-pwa/mi-kiosco
-npx firebase-tools emulators:start --only hosting
+npx firebase-tools deploy --only firestore:rules
 ```
 
-Abrir:
+### Backend
 
-```text
-http://127.0.0.1:5000
-```
+Publicar `kiosco-api/` en el proveedor serverless ya configurado por el proyecto y registrar las variables de entorno de Firebase Admin, CORS y Cloudinary.
 
-## Pruebas web
+Después, colocar la URL pública del backend en `mediaApiBaseUrl`.
 
-1. Iniciar sesión como administrador.
-2. Abrir **Productos** y editar un producto.
-3. Pulsar `+` en Categoría, crear una y confirmar que quede seleccionada.
-4. Elegir esa categoría, pulsar `+` en Subcategoría y crear una.
-5. Realizar un pedido con Efectivo; no debe pedir imagen.
-6. Realizar un pedido con Tarjeta; debe exigir imagen.
-7. Realizar un pedido con Billetera digital y elegir Yape o Plin.
-8. Escribir 301 caracteres en Notas; el campo debe detenerse en 300.
-9. Entrar en **Recibos** y probar Hoy, Semana y Mes.
-10. Emitir un recibo y confirmar que abra una pestaña nueva.
-11. Pulsar **Imprimir / guardar PDF**.
-12. Abrir **Pago** y verificar Descargar e Imprimir.
+## Datos y seguridad
 
-## Pruebas Expo
+- Firestore sigue siendo la base de datos operativa.
+- Firebase Auth sigue administrando la autenticación.
+- Las imágenes nuevas del catálogo se guardan fuera de Firebase.
+- El API secret de Cloudinary permanece exclusivamente en el backend.
+- Los endpoints administrativos validan el Firebase ID Token.
+- Las imágenes antiguas de Firebase Storage siguen mostrándose para conservar compatibilidad.
+- No se deben versionar `.env`, claves privadas, tokens, service accounts ni secretos de API.
 
-1. Abrir la app con Expo Go.
-2. Agregar productos y abrir Confirmar pedido.
-3. Elegir Tarjeta, Yape o Plin.
-4. Seleccionar una imagen y verificar la vista previa.
-5. Enviar el pedido y confirmar que aparezca en el administrador.
-6. Emitir el recibo desde la web.
-7. Abrir Pedidos o Seguimiento en Expo.
-8. Abrir el recibo desde el navegador del teléfono e imprimir o guardar como PDF.
+## Recibos
 
-## Consideraciones de seguridad y costo
+Los recibos generados por Kiosco son representaciones informativas del pedido. No deben considerarse comprobantes electrónicos tributarios válidos ante SUNAT salvo que el proyecto incorpore una integración fiscal autorizada para ese fin.
 
-La imagen se comprime y se guarda en Firestore para mantener el flujo dentro del plan gratuito y evitar una carga pública abierta en Storage. Aun así, cualquier endpoint o colección que acepte contenido de clientes sin autenticación puede recibir abuso. Para una operación comercial sostenida se recomienda autenticar clientes o emitir un token de carga por pedido desde el backend.
+## PWA
 
-Los recibos locales son documentos comerciales informativos. La emisión electrónica real ante SUNAT requiere el flujo tributario autorizado, certificado digital y envío del comprobante electrónico correspondiente.
+La web usa un Service Worker para:
 
-<!-- KIOSCO_NINE_IMPROVEMENTS:README_START -->
-<!-- KIOSCO_NINE_IMPROVEMENTS:README_VERSION=2 -->
-## Mejoras de catálogo, gastos, inventario y analítica (2026-08)
+- cachear el shell de la aplicación;
+- mejorar la carga de recursos;
+- ofrecer comportamiento offline parcial;
+- aplicar actualizaciones de versión;
+- permitir una experiencia instalable cuando el navegador lo soporte.
 
-Esta versión incorpora nueve mejoras incrementales en el frontend Vanilla JavaScript, Bootstrap 5.3 y Firebase Spark. No agrega dependencias npm al frontend, no usa Cloud Functions y no requiere índices compuestos de Firestore. Las consultas nuevas no combinan `where()` con `orderBy()`; el filtrado y ordenamiento se ejecutan en memoria.
+Cuando se publique una versión nueva y el navegador conserve recursos anteriores, cerrar y volver a abrir la PWA o recargarla después de que aparezca el aviso de actualización.
 
-| Mejora | Cobertura |
-|---|---|
-| 2 | Productos relacionados desde el array local. |
-| 4 | Compartir por WhatsApp y enlace `#producto-ID`. |
-| 6 | Gastos, resumen, gráfico, Excel, utilidad y reglas. |
-| 8 | Alertas, desactivación atómica, reposición y auditoría. |
-| 11 | Modal individual completo y compartible. |
-| 16 | Calendario de calor y pedidos por hora. |
-| 20 | Catálogo PDF A4 agrupado por categoría. |
-| 22 | Generación, descarga y escaneo QR. |
-| 25 | Plantilla, vista previa e importación Excel. |
+## Verificación recomendada antes de producción
 
-### Productos relacionados, detalle y enlaces compartibles
+Probar como mínimo:
 
-- Las tarjetas de la tienda abren un modal de detalle con imagen, descripción completa, precio, categoría, subcategoría, indicador de stock, selector de cantidad y acciones de carrito.
-- La sección **También te puede interesar** usa exclusivamente el array de productos que `Store` ya mantiene en memoria. Prioriza hasta cuatro productos activos de la misma categoría; cuando no existen coincidencias, usa productos activos aleatorios.
-- Cada tarjeta y el modal incluyen compartir por WhatsApp mediante `https://wa.me/?text=...`.
-- Las URLs de producto usan el formato `https://mi-kiosco-c7313.web.app/#producto-ID`. Al abrir una URL de producto, la tienda restablece el filtro, desplaza la tarjeta al centro, aplica un resaltado temporal y abre el modal.
-- El modal utiliza `history.pushState`; al cerrarse elimina el hash sin recargar la aplicación.
+1. tienda en 320 px, 375 px, 414 px, 768 px, 1024 px, 1366 px y 1920 px;
+2. categorías horizontales en tablet y móvil;
+3. panel admin sin menú hamburguesa;
+4. creación de un producto con imagen;
+5. edición de un producto sin cambiar su imagen;
+6. reemplazo de una imagen;
+7. eliminación de un producto con imagen;
+8. visualización de imágenes antiguas almacenadas en Firebase Storage;
+9. carrito y envío de pedido;
+10. modales de producto, pedido, personal y configuración;
+11. modo claro y modo oscuro;
+12. PWA después de una recarga y después de una actualización del Service Worker.
 
-### Gastos y utilidad neta
+## Nota sobre servicios gratuitos
 
-Se agregó la sección **Gastos** entre Caja y Horario. La colección `expenses` utiliza este esquema:
+El código está preparado para funcionar con los niveles gratuitos disponibles de los servicios utilizados, pero cada proveedor mantiene sus propios límites, condiciones y cuotas. Antes de usar el sistema para una operación comercial real, revisar las condiciones vigentes de Firebase, Cloudinary y del proveedor donde se despliegue `kiosco-api/`.
 
-```text
-expenses/{expenseId}
-  description: string
-  amount: number
-  category: "Mercadería" | "Servicios" | "Transporte" | "Personal" | "Otros"
-  date: timestamp
-  createdAt: timestamp
-```
+## Estado del proyecto
 
-La sección ofrece alta, edición, eliminación, filtro mensual, tarjetas por categoría, total mensual, gráfico por día y exportación Excel con SheetJS. El Dashboard incorpora **Gastos del período** y **Utilidad neta**, calculada como ingresos no rechazados menos gastos del mismo período.
-
-Las reglas incluidas permiten leer y escribir gastos únicamente a usuarios autenticados:
-
-```text
-allow read, write: if request.auth != null;
-```
-
-### Inventario y reposición
-
-- La transacción existente del checkout calcula `nextStock` y, cuando llega a cero, escribe también `active: false` en la misma operación atómica. El proyecto ya descontaba el inventario al crear el pedido; no se vuelve a descontar al cambiar su estado para evitar una salida duplicada.
-- Productos administrativos muestran **Sin stock** en rojo intermitente para stock cero y **Stock bajo** en amarillo para cantidades de 1 a 5.
-- El Dashboard incluye productos con stock cero aunque hayan quedado inactivos y los diferencia visualmente de los productos con stock bajo.
-- **Reponer stock** suma una cantidad al valor actual, reactiva el producto y registra de forma atómica un documento en `audit_log` con `action`, `product`, `previousStock`, `addedQty`, `newStock`, `admin` y `createdAt`.
-
-### Mapa de calor de pedidos
-
-El Dashboard incluye la pestaña **Mapa de calor**:
-
-- Calendario mensual construido con HTML y CSS Grid. La intensidad representa 0, 1–3, 4–7 y 8 o más pedidos; cada día informa pedidos e ingresos mediante tooltip.
-- Gráfico Chart.js por hora para el período seleccionado previamente: Hoy, Semana o Mes.
-- Ambas visualizaciones usan el array de pedidos ya cargado por `Dashboard`; no crean otra consulta a Firestore.
-
-### Catálogo PDF
-
-En Productos, **Exportar catálogo PDF** genera un archivo A4 vertical llamado `catalogo-YYYY-MM-DD.pdf`. Incluye portada, logo y nombre de `config/theme`, fecha, total de productos, agrupación por categoría, tabla con imagen, nombre, descripción, categoría, precio y stock, además de pie y numeración. Las imágenes se convierten a base64 mediante canvas; si el servidor remoto no permite CORS o no existe imagen, se muestra el texto `Sin imagen`.
-
-### QR de producto y escáner
-
-- El modal de producto y las tarjetas administrativas generan un QR con la URL pública del producto mediante el bundle navegador `qrcode@1.5.1` servido por cdnjs y permiten descargarlo como PNG. Se usa esta versión porque los paquetes npm 1.5.2–1.5.4 no publicaron el directorio `build/` precompilado.
-- El header público incluye un escáner. Usa `BarcodeDetector` cuando el navegador lo soporta y `jsQR` desde CDN como alternativa. Requiere HTTPS y permiso de cámara.
-- Un QR válido navega al hash correspondiente, resalta la tarjeta y abre el modal de detalle.
-
-### Importación Excel
-
-**Importar desde Excel** permite:
-
-1. Descargar una plantilla SheetJS con las columnas `nombre`, `descripcion`, `precio`, `stock`, `categoria`, `subcategoria`, `imageUrl` y `activo`.
-2. Cargar `.xlsx` o `.xls` y revisar las primeras cinco filas.
-3. Validar nombre, precio, stock, URL, estado y categorías sin realizar consultas adicionales; los IDs se resuelven desde el array local de `Admin`.
-4. Crear productos en grupos de diez promesas concurrentes y mostrar progreso, cantidad importada y errores por fila.
-
-`stock` vacío se guarda como ilimitado. `activo` acepta `SI` o `NO` y usa `SI` cuando queda vacío. Cada producto recibe `createdAt` y `updatedAt` con `serverTimestamp()`.
-
-### Archivos incorporados
-
-```text
-web/css/kiosco-nine-improvements.css
-web/js/kiosco-product-experience.js
-web/js/kiosco-admin-operations.js
-web/js/kiosco-dashboard-heatmap.js
-```
-
-También se actualizaron `web/index.html`, `web/js/firebase.js`, `web/js/cart.js`, `web/js/admin.js`, `web/js/dashboard.js`, `web/sw.js` y `firestore.rules`. El Service Worker cambia de versión para invalidar la caché anterior e incluye los nuevos recursos en el app shell.
-
-### Validación y despliegue
-
-```bash
-for file in web/js/*.js; do node --check "$file" || exit 1; done
-firebase deploy --only firestore:rules
-firebase deploy --only hosting
-```
-
-Para desplegar reglas y hosting en una sola operación:
-
-```bash
-firebase deploy --only firestore:rules,hosting
-```
-
-Después del despliegue, conviene cerrar y volver a abrir la PWA o aceptar la actualización del Service Worker para cargar la nueva versión del app shell.
-<!-- KIOSCO_NINE_IMPROVEMENTS:README_END -->
+Kiosco es un sistema funcional en evolución. La prioridad de estas mejoras es mantener compatibilidad con el comportamiento existente mientras se mejora la experiencia responsive y se separa el almacenamiento de imágenes del catálogo respecto de Firebase.
