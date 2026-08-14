@@ -2,17 +2,14 @@
 const Admin = (() => {
   let prods = [], cats = [], unsubP = null, unsubC = null, ready = false, staffCache = [];
   let selectedProductImageFile = null;
+  let productSaveInProgress = false;
   let currentProductImagePath = null;
   let currentProductImageUrl = null;
   let previewObjectUrl = null;
   const productImageUrlCache = new Map();
-  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-  const COMMON_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif', 'bmp', 'heic', 'heif', 'tif', 'tiff', 'ico', 'jxl']);
-  const CLOUDINARY_PATH_PREFIX = 'cloudinary:';
-
-  function isCloudinaryImagePath(path) {
-    return String(path || '').startsWith(CLOUDINARY_PATH_PREFIX);
-  }
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+  const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']);
+  const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg']);
 
   function init() {
     if (ready) return;
@@ -64,7 +61,6 @@ const Admin = (() => {
   // PRODUCTS
   async function resolveProductImage(product) {
     if (product.imageUrl) return { ...product, resolvedImageUrl: product.imageUrl };
-    if (isCloudinaryImagePath(product.imagePath)) return { ...product, resolvedImageUrl: null };
     if (!product.imagePath || !window.storage) return { ...product, resolvedImageUrl: null };
 
     try {
@@ -97,7 +93,7 @@ const Admin = (() => {
           <div class="card h-100 ${product.active === false ? 'opacity-50' : ''}">
             <div class="card-img-wrap" style="height:140px;overflow:hidden">
               ${imageUrl
-                ? `<img src="${esc(imageUrl)}" alt="${esc(product.name)}" class="card-img-top h-100 w-100" style="object-fit:cover" onerror="this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 bg-secondary\'><i class=\'bi bi-image text-white display-5\'></i></div>'">`
+                ? `<img src="${esc(imageUrl)}" alt="${esc(product.name)}" loading="lazy" decoding="async" class="card-img-top h-100 w-100" style="object-fit:cover" onerror="this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 bg-secondary\'><i class=\'bi bi-image text-white display-5\'></i></div>'">`
                 : '<div class="d-flex align-items-center justify-content-center h-100 bg-secondary"><i class="bi bi-bag display-5 text-white"></i></div>'}
             </div>
             <div class="card-body p-2">
@@ -168,15 +164,13 @@ const Admin = (() => {
   async function validateImageFile(file) {
     if (!file) throw new Error('Selecciona una imagen');
     const extension = file.name.split('.').pop()?.toLowerCase() || '';
-    const mime = String(file.type || '').toLowerCase();
-    const looksLikeImage = mime.startsWith('image/') || COMMON_IMAGE_EXTENSIONS.has(extension);
-    if (!looksLikeImage) {
-      throw new Error('El archivo seleccionado no parece ser una imagen compatible');
+    if (!ALLOWED_IMAGE_EXTENSIONS.has(extension) || (file.type && !ALLOWED_IMAGE_TYPES.has(file.type))) {
+      throw new Error('Formato no permitido. Usa JPG, JPEG, PNG, WEBP, GIF o SVG');
     }
-    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 10 MB');
+    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 5 MB');
     if (file.size === 0) throw new Error('El archivo está vacío');
 
-    if (extension === 'svg' || mime === 'image/svg+xml') {
+    if (extension === 'svg') {
       const content = await file.text();
       if (!/<svg[\s>]/i.test(content) || /<script[\s>]/i.test(content) || /\son[a-z]+\s*=/i.test(content)) {
         throw new Error('El archivo SVG contiene contenido no permitido');
@@ -221,6 +215,7 @@ const Admin = (() => {
     document.getElementById('productUnit').value = 'Unidad';
     document.getElementById('productDiscount').value = '0';
     setProductPreview(null);
+    document.getElementById('productImageUploadStatus')?.replaceChildren();
     populateCatSelect();
 
     if (id) {
@@ -247,83 +242,51 @@ const Admin = (() => {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('productModal')).show();
   }
 
-  function getMediaApiBaseUrl() {
-    return String(
-      window.KIOSCO_UPGRADE_CONFIG?.mediaApiBaseUrl
-      || window.KIOSCO_UPGRADE_CONFIG?.apiBaseUrl
-      || ''
-    ).trim().replace(/\/+$/, '');
-  }
-
-  async function getCurrentAdminToken() {
-    const user = window.auth?.currentUser;
-    if (!user) throw new Error('Debes iniciar sesión como administrador para gestionar imágenes');
-    return user.getIdToken(true);
-  }
-
-  async function requestMediaApi(action, payload = {}) {
-    const baseUrl = getMediaApiBaseUrl();
-    if (!baseUrl) {
-      throw new Error('Configura mediaApiBaseUrl en web/js/kiosco-upgrade-config.js');
-    }
-
-    const token = await getCurrentAdminToken();
-    const response = await fetch(`${baseUrl}/api/media`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ action, ...payload })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'No se pudo completar la operación de imagen');
-    return data;
-  }
-
-  function toCloudinaryDeliveryUrl(url) {
-    const raw = String(url || '');
-    if (!raw.includes('res.cloudinary.com') || !raw.includes('/image/upload/')) return raw;
-    return raw.replace('/image/upload/', '/image/upload/f_auto,q_auto/');
+  function sanitizeFileName(name) {
+    return String(name || 'imagen')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .toLowerCase();
   }
 
   async function uploadProductImage(productId, file) {
     await validateImageFile(file);
-    const ticket = await requestMediaApi('sign-upload', { productId, filename: file.name });
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('api_key', ticket.apiKey);
-    formData.append('signature', ticket.signature);
-    Object.entries(ticket.signedParams || {}).forEach(([key, value]) => {
-      formData.append(key, String(value));
-    });
-
-    const response = await fetch(ticket.uploadUrl, { method: 'POST', body: formData });
-    const asset = await response.json().catch(() => ({}));
-    if (!response.ok || !asset.secure_url || !asset.public_id) {
-      throw new Error(asset?.error?.message || 'Cloudinary no pudo guardar la imagen');
+    if (!window.KioscoMedia?.upload) {
+      throw new Error('El módulo de imágenes no está cargado. Recarga la aplicación e inténtalo nuevamente.');
     }
-
-    return {
-      imagePath: `${CLOUDINARY_PATH_PREFIX}${asset.public_id}`,
-      imageUrl: toCloudinaryDeliveryUrl(asset.secure_url)
-    };
+    const status = document.getElementById('productImageUploadStatus');
+    if (status) status.innerHTML = '<i class="bi bi-image me-1"></i>Optimizando imagen…';
+    const asset = await window.KioscoMedia.upload(file, {
+      scope: 'productos',
+      entityId: productId,
+      maxBytes: MAX_IMAGE_SIZE,
+      onProgress(percent) {
+        if (!status) return;
+        const label = percent < 45 ? 'Optimizando imagen' : percent < 100 ? 'Guardando en el repositorio' : 'Imagen procesada';
+        status.innerHTML = '<div class="d-flex align-items-center justify-content-between gap-2"><span><i class="bi bi-cloud-arrow-up me-1"></i>' + label + '</span><strong>' + percent + '%</strong></div><div class="progress mt-1" role="progressbar" aria-valuenow="' + percent + '" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:' + percent + '%"></div></div>';
+      }
+    });
+    if (status) {
+      status.innerHTML = asset.pendingDeploy
+        ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Guardada en GitHub. Firebase Hosting se actualizará con el despliegue automático.</span>'
+        : '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Guardada en web/uploads del repositorio local.</span>';
+    }
+    return { imagePath: asset.path, imageUrl: asset.url, pendingDeploy: asset.pendingDeploy };
   }
 
   async function deleteStorageImage(path) {
     if (!path) return;
-
-    if (isCloudinaryImagePath(path)) {
-      const publicId = String(path).slice(CLOUDINARY_PATH_PREFIX.length);
-      if (!publicId) return;
-      try {
-        await requestMediaApi('destroy', { publicId });
-      } catch (error) {
-        console.warn('No se pudo eliminar la imagen externa anterior:', error?.message || error);
-      }
+    if (isRepositoryImagePath(path)) {
+      try { await window.KioscoMedia?.remove?.(path); }
+      catch (error) { console.warn('No se pudo eliminar la imagen del repositorio:', error?.message || error); }
       return;
     }
-
+    if (isCloudinaryImagePath(path)) {
+      // Compatibilidad con imágenes históricas. Ya no se crean nuevos assets Cloudinary.
+      return;
+    }
     if (!window.storage) return;
     try {
       await window.storage.ref(path).delete();
@@ -337,6 +300,8 @@ const Admin = (() => {
 
   async function saveProduct(event) {
     event.preventDefault();
+    if (productSaveInProgress) return;
+    productSaveInProgress = true;
 
     const id = document.getElementById('productId').value;
     const name = document.getElementById('productName').value.trim();
@@ -348,18 +313,22 @@ const Admin = (() => {
 
     if (!name) {
       showToast('El nombre es obligatorio', 'danger');
+      productSaveInProgress = false;
       return;
     }
     if (!Number.isFinite(price) || price < 0) {
       showToast('Precio inválido', 'danger');
+      productSaveInProgress = false;
       return;
     }
     if (stockRaw !== '' && (!Number.isInteger(Number(stockRaw)) || Number(stockRaw) < 0)) {
       showToast('Stock inválido', 'danger');
+      productSaveInProgress = false;
       return;
     }
     if (!Number.isFinite(discount) || discount < 0 || discount > 100) {
       showToast('El descuento debe estar entre 0 y 100', 'danger');
+      productSaveInProgress = false;
       return;
     }
 
@@ -375,6 +344,7 @@ const Admin = (() => {
       : db.collection(COLL.products).doc();
     const previousImagePath = currentProductImagePath;
     let uploadedImagePath = null;
+    let uploadedImagePendingDeploy = false;
 
     try {
       const data = {
@@ -392,25 +362,15 @@ const Admin = (() => {
       };
 
       if (selectedProductImageFile) {
-        const uploadedImage = await uploadProductImage(productReference.id, selectedProductImageFile);
-        uploadedImagePath = uploadedImage.imagePath;
-        data.imagePath = uploadedImage.imagePath;
-        data.imageUrl = uploadedImage.imageUrl;
-      } else if (
-        id
-        && isCloudinaryImagePath(currentProductImagePath)
-        && enteredImageUrl === String(currentProductImageUrl || '').trim()
-      ) {
-        data.imagePath = currentProductImagePath;
-        data.imageUrl = currentProductImageUrl || null;
+        uploadedImagePath = await uploadProductImage(productReference.id, selectedProductImageFile);
+        data.imagePath = uploadedImagePath;
+        data.imageUrl = null;
       } else if (enteredImageUrl) {
         data.imagePath = null;
         data.imageUrl = enteredImageUrl;
       } else if (id) {
         data.imagePath = currentProductImagePath || null;
-        data.imageUrl = isCloudinaryImagePath(currentProductImagePath)
-          ? (currentProductImageUrl || null)
-          : (currentProductImagePath ? null : (currentProductImageUrl || null));
+        data.imageUrl = currentProductImagePath ? null : (currentProductImageUrl || null);
       } else {
         data.imagePath = null;
         data.imageUrl = null;
@@ -427,7 +387,7 @@ const Admin = (() => {
         await deleteStorageImage(previousImagePath);
       }
 
-      showToast(id ? 'Producto actualizado' : 'Producto creado', 'success');
+      showToast(uploadedImagePendingDeploy ? (id ? 'Producto actualizado. La imagen se está publicando en Hosting.' : 'Producto creado. La imagen se está publicando en Hosting.') : (id ? 'Producto actualizado' : 'Producto creado'), 'success');
       bootstrap.Modal.getInstance(document.getElementById('productModal'))?.hide();
       selectedProductImageFile = null;
       revokePreviewObjectUrl();
@@ -435,6 +395,9 @@ const Admin = (() => {
       if (uploadedImagePath) await deleteStorageImage(uploadedImagePath);
       showToast(`No se pudo guardar el producto: ${error.message}`, 'danger');
     } finally {
+      productSaveInProgress = false;
+      const status = document.getElementById('productImageUploadStatus');
+      if (status && !selectedProductImageFile) status.innerHTML = '';
       if (button) {
         button.disabled = false;
         button.innerHTML = originalButtonHtml;

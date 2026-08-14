@@ -426,3 +426,101 @@
     transition: none !important;
   }
 }
+
+
+/* KIOSCO_MEDIA_DIRECT_V11 */
+.kiosco-media-status {
+  min-height: 1.35rem;
+  font-size: .82rem;
+  color: var(--app-text-muted, #6b7280);
+}
+.kiosco-media-status .progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-border) 70%, transparent);
+}
+#productImageFile,
+#kBrandLogoFile {
+  cursor: pointer;
+}
+#productImageFile::file-selector-button,
+#kBrandLogoFile::file-selector-button {
+  min-height: 40px;
+  margin-inline-end: .75rem;
+  border: 0;
+  border-inline-end: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-surface-soft) 92%, transparent);
+  color: inherit;
+  font-weight: 600;
+}
+#productModal .product-image-preview {
+  overflow: hidden;
+  min-height: 180px;
+  max-height: 360px;
+}
+#productModal .product-image-preview img {
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+}
+#toastContainer {
+  width: min(390px, calc(100vw - 1rem));
+  max-height: calc(100dvh - 1rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: none;
+}
+#toastContainer > * {
+  pointer-events: auto;
+}
+@media (min-width: 992px) {
+  #productModal .modal-content {
+    max-height: calc(100dvh - 3rem);
+  }
+  #productModal .modal-body {
+    overflow-y: auto;
+  }
+}
+@media (max-width: 575.98px) {
+  #toastContainer {
+    inset: .5rem .5rem auto .5rem !important;
+    width: auto;
+  }
+  #productImageFile,
+  #kBrandLogoFile {
+    min-height: 48px;
+    font-size: .92rem;
+  }
+  #productModal .product-image-preview {
+    min-height: 150px;
+    max-height: 42dvh;
+  }
+}
+
+/* KIOSCO_REPOSITORY_MEDIA_V120 */
+.kiosco-media-status {
+  min-height: 1.4rem;
+}
+.kiosco-media-status .progress {
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.kiosco-media-status .progress-bar {
+  transition: width .18s ease;
+}
+#productImgPreview,
+#kBrandPreviewLogo img {
+  content-visibility: auto;
+}
+@media (max-width: 575.98px) {
+  #productModal .modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+  }
+  #productModal .modal-footer .btn {
+    min-height: 46px;
+  }
+}

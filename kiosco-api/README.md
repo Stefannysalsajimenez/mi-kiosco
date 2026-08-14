@@ -3,6 +3,7 @@
 Backend Node.js para Firebase Admin, notificaciones FCM, estadísticas, mensajería opt-in y generación de boletas PDF.
 
 ## Endpoints
+- `POST /api/media` — requiere administrador Firebase. Optimiza desde el frontend y guarda/elimina imágenes en `web/uploads/`. En local escribe al disco; en producción usa GitHub Contents API.
 
 - `POST /api/notify` — recibe `{ "orderId": "..." }`, valida que el pedido sea reciente, aplica idempotencia y envía FCM a `config/admin.fcmTokens`.
 - `POST /api/whatsapp` — recibe `{ "orderId": "..." }`; solo envía si el teléfono está previamente autorizado en `CALLMEBOT_CLIENT_KEYS_JSON`.
@@ -58,3 +59,13 @@ Esta integración no sustituye WhatsApp Business API y no es adecuada para mensa
 ## Alcance tributario
 
 El PDF es una representación profesional e informativa. No genera XML UBL, firma digital, envío a SUNAT/OSE, CDR ni baja/resumen diario. Para una boleta electrónica con validez tributaria se requiere un RUC habilitado, certificado digital y un flujo autorizado por SUNAT u OSE/PSE.
+
+
+<!-- KIOSCO_REPOSITORY_MEDIA_V120 -->
+## Imágenes en el repositorio
+
+Las imágenes nuevas no usan Cloudinary ni Firebase Storage. El navegador reduce la imagen a WEBP y el endpoint administrativo la guarda en `web/uploads/productos/<id>/image.webp` o `web/uploads/branding/logo.webp`.
+
+En producción configura `KIOSCO_MEDIA_MODE=github`, `KIOSCO_GITHUB_REPOSITORY`, `KIOSCO_GITHUB_BRANCH` y `KIOSCO_GITHUB_TOKEN`. El token debe ser fine-grained, limitado al repositorio de Kiosco y con permiso **Contents: Read and write**. Nunca se coloca en `web/`.
+
+Para que cada commit de imagen se publique automáticamente en Firebase Hosting, configura una vez la integración oficial de Hosting con GitHub mediante `firebase init hosting:github`.

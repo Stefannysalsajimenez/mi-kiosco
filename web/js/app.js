@@ -39,6 +39,15 @@ function showToast(message, type = 'info') {
   const container = AppDom.byId('toastContainer');
   if (!container) return;
 
+  const toastSignature = `${type}:${String(message ?? '')}`;
+  const duplicatedToast = Array.from(container.querySelectorAll('.toast')).find(item => item.dataset.toastSignature === toastSignature);
+  if (duplicatedToast) {
+    const instance = typeof bootstrap !== 'undefined' ? bootstrap.Toast.getOrCreateInstance(duplicatedToast, { delay: 3500 }) : null;
+    instance?.show();
+    return;
+  }
+  while (container.children.length >= 4) container.firstElementChild?.remove();
+
   const iconByType = {
     success: 'check-circle-fill',
     danger: 'exclamation-triangle-fill',
@@ -58,6 +67,7 @@ function showToast(message, type = 'info') {
   toast.setAttribute('role', 'alert');
   toast.setAttribute('aria-live', 'assertive');
   toast.setAttribute('aria-atomic', 'true');
+  toast.dataset.toastSignature = toastSignature;
 
   const wrapper = document.createElement('div');
   wrapper.className = 'd-flex';

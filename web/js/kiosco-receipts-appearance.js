@@ -2,8 +2,8 @@
 
 (() => {
   const UPGRADE_CONFIG = Object.assign({ apiBaseUrl: '' }, window.KIOSCO_UPGRADE_CONFIG || {});
-  const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
-  const COMPATIBLE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif', 'bmp', 'ico', 'heic', 'heif', 'tif', 'tiff']);
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+  const COMPATIBLE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif', 'bmp', 'ico', 'heic', 'heif', 'tif', 'tiff', 'jxl']);
   const state = {
     theme: {},
     billing: {},
@@ -128,59 +128,39 @@
 
   async function normalizeImage(file) {
     if (!file || file.size === 0) throw new Error('Selecciona una imagen válida');
-    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 8 MB');
+    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen original no debe superar 10 MB');
     const extension = String(file.name || '').split('.').pop()?.toLowerCase() || '';
-    if (!file.type.startsWith('image/') && !COMPATIBLE_EXTENSIONS.has(extension)) {
-      throw new Error('El archivo seleccionado no es una imagen');
-    }
-
-    if (extension === 'svg' || file.type === 'image/svg+xml') {
+    const mime = String(file.type || '').toLowerCase();
+    if (!mime.startsWith('image/') && !COMPATIBLE_EXTENSIONS.has(extension)) throw new Error('El archivo seleccionado no es una imagen compatible');
+    if (extension === 'svg' || mime === 'image/svg+xml') {
       const source = await file.text();
-      if (!/<svg[\s>]/i.test(source) || /<script[\s>]/i.test(source) || /\son[a-z]+\s*=/i.test(source)) {
-        throw new Error('El SVG contiene código no permitido');
-      }
-      return file;
+      if (!/<svg[\s>]/i.test(source) || /<script[\s>]/i.test(source) || /\son[a-z]+\s*=/i.test(source)) throw new Error('El SVG contiene código no permitido');
     }
-
-    const nativelyCompatible = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
-    if (nativelyCompatible.has(file.type)) return file;
-
-    try {
-      const bitmap = await createImageBitmap(file);
-      const maximum = 1600;
-      const scale = Math.min(1, maximum / Math.max(bitmap.width, bitmap.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close?.();
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
-      if (!blob) throw new Error('No se pudo convertir');
-      return new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.png`, { type: 'image/png' });
-    } catch {
-      throw new Error('Este formato no puede mostrarse de forma compatible en Android y iPhone. Usa PNG, JPG, WEBP, GIF, SVG o AVIF.');
-    }
+    return file;
   }
 
   async function uploadLogo(file) {
-    if (!window.storage) throw new Error('Firebase Storage no está disponible');
     if (!window.auth?.currentUser) throw new Error('Solo el administrador puede subir imágenes');
+    if (!window.KioscoMedia?.upload) throw new Error('El módulo de imágenes no está disponible. Recarga la aplicación.');
     const normalized = await normalizeImage(file);
-    const path = `branding/logo/${Date.now()}-${sanitizeFileName(normalized.name)}`;
-    const reference = window.storage.ref(path);
-    await reference.put(normalized, {
-      contentType: normalized.type || 'application/octet-stream',
-      cacheControl: 'public,max-age=3600',
-      customMetadata: { uploadedBy: window.auth.currentUser.uid }
+    const asset = await window.KioscoMedia.upload(normalized, {
+      scope: 'branding',
+      entityId: 'logo',
+      maxBytes: MAX_IMAGE_SIZE
     });
-    return { path, url: await reference.getDownloadURL() };
+    return { path: asset.path, url: asset.url, pendingDeploy: asset.pendingDeploy };
   }
-
   async function deleteStorageFile(path) {
-    if (!path || !window.storage) return;
-    try { await window.storage.ref(path).delete(); } catch (error) {
-      if (error?.code !== 'storage/object-not-found') console.warn('Logo anterior:', error);
+    if (!path) return;
+    if (window.KioscoMedia?.isRepositoryPath?.(path)) {
+      try { await window.KioscoMedia.remove(path); }
+      catch (error) { console.warn('Logo del repositorio:', error?.message || error); }
+      return;
     }
+    if (window.KioscoMedia?.isCloudinaryPath?.(path) || String(path).startsWith('cloudinary:')) return;
+    if (!window.storage) return;
+    try { await window.storage.ref(path).delete(); }
+    catch (error) { if (error?.code !== 'storage/object-not-found') console.warn('Logo anterior:', error); }
   }
 
   function applyLiveTheme(theme) {
@@ -227,8 +207,8 @@
                 <div class="col-md-4"><label class="form-label fw-semibold">ETA (min)</label><input id="kBrandEta" type="number" min="1" max="180" class="form-control"></div>
                 <div class="col-12">
                   <label class="form-label fw-semibold">Logo desde el dispositivo</label>
-                  <input id="kBrandLogoFile" type="file" class="form-control" accept="image/*,.svg,.avif,.heic,.heif,.tif,.tiff,.bmp,.ico">
-                  <div class="form-text">Se convierte a un formato compatible cuando el navegador puede leerlo. Máximo 8 MB. Recomendado: PNG, JPG o WEBP.</div>
+                  <input id="kBrandLogoFile" type="file" class="form-control" accept="image/*,.svg,.avif,.heic,.heif,.tif,.tiff,.bmp,.ico,.jxl">
+                  <div class="form-text">Selecciona el logo desde este dispositivo. Kiosco lo optimiza y lo guarda en web/uploads/branding del repositorio. Máximo original: 10 MB.</div>
                 </div>
                 <div class="col-12"><label class="form-label fw-semibold">URL alternativa del logo</label><input id="kBrandLogoUrl" type="url" class="form-control" placeholder="https://..."></div>
                 <div class="col-12 d-flex gap-2 flex-wrap">
@@ -340,7 +320,9 @@
 
   async function saveAppearance() {
     const button = document.getElementById('kSaveAppearance');
+    const originalButtonHtml = button.innerHTML;
     button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Publicando';
     const previousPath = state.theme.storeLogoPath || null;
     let uploaded = null;
     try {
@@ -366,7 +348,7 @@
       const fileInput = document.getElementById('kBrandLogoFile');
       if (fileInput) fileInput.value = '';
       applyLiveTheme({ ...state.theme, ...changes });
-      toast('Apariencia publicada en tiempo real', 'success');
+      toast(uploaded?.pendingDeploy ? 'Apariencia guardada. El nuevo logo se publicará al completar Firebase Hosting.' : 'Apariencia publicada en tiempo real', 'success');
     } catch (error) {
       if (uploaded?.path) await deleteStorageFile(uploaded.path);
       toast(error.message, 'danger');
