@@ -217,17 +217,6 @@
       card.setAttribute('aria-label', `Ver detalle de ${product.name}`);
       card.classList.add('kiosco-product-detail-trigger');
 
-      const imageWrap = card.querySelector('.prod-img-wrap') || card;
-      if (!imageWrap.querySelector('[data-kiosco-share-product]')) {
-        const shareButton = document.createElement('button');
-        shareButton.type = 'button';
-        shareButton.className = 'btn btn-success btn-sm kiosco-product-share-button';
-        shareButton.dataset.kioscoShareProduct = product.id;
-        shareButton.title = `Compartir ${product.name} por WhatsApp`;
-        shareButton.setAttribute('aria-label', `Compartir ${product.name} por WhatsApp`);
-        shareButton.innerHTML = '<i class="bi bi-whatsapp" aria-hidden="true"></i>';
-        imageWrap.appendChild(shareButton);
-      }
     });
   }
 
@@ -371,7 +360,7 @@
               </button>
               <div class="d-flex gap-2">
                 <button type="button" class="btn btn-outline-success flex-grow-1" data-kiosco-share-product="${escapeHtml(product.id)}">
-                  <i class="bi bi-whatsapp me-2"></i>Compartir
+                  Compartir
                 </button>
                 <button type="button" class="btn btn-outline-secondary" data-kiosco-product-qr="${escapeHtml(product.id)}" title="Generar QR" aria-label="Generar QR de ${escapeHtml(product.name)}">
                   <i class="bi bi-qr-code"></i>

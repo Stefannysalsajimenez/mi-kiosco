@@ -32,6 +32,8 @@
   <link rel="stylesheet" href="css/kiosco-audit.css">
   <!-- KIOSCO_NINE:CSS -->
   <link rel="stylesheet" href="css/kiosco-nine-improvements.css">
+  <!-- KIOSCO_RESPONSIVE_MEDIA_V10:CSS -->
+  <link rel="stylesheet" href="css/kiosco-responsive-media-v10.css">
 </head>
 
 <body>
@@ -677,8 +679,8 @@
               <div class="col-12">
                 <label class="form-label fw-semibold" for="productImageFile">Subir imagen</label>
                 <input type="file" class="form-control" id="productImageFile"
-                  accept=".jpg,.jpeg,.png,.webp,.gif,.svg,image/jpeg,image/png,image/webp,image/gif,image/svg+xml" />
-                <div class="form-text">Formatos: JPG, JPEG, PNG, WEBP, GIF y SVG. Tamaño máximo: 5 MB.</div>
+                  accept="image/*,.avif,.bmp,.heic,.heif,.ico,.jxl,.svg,.tif,.tiff" />
+                <div class="form-text">La imagen nueva se guarda fuera de Firebase, en la carpeta de medios configurada. Se aceptan formatos de imagen compatibles con Cloudinary. Tamaño máximo: 10 MB.</div>
               </div>
               <div class="col-12">
                 <label class="form-label fw-semibold" for="productImageUrl">URL de imagen alternativa</label>

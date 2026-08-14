@@ -6,9 +6,13 @@ const Admin = (() => {
   let currentProductImageUrl = null;
   let previewObjectUrl = null;
   const productImageUrlCache = new Map();
-  const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-  const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']);
-  const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg']);
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+  const COMMON_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif', 'bmp', 'heic', 'heif', 'tif', 'tiff', 'ico', 'jxl']);
+  const CLOUDINARY_PATH_PREFIX = 'cloudinary:';
+
+  function isCloudinaryImagePath(path) {
+    return String(path || '').startsWith(CLOUDINARY_PATH_PREFIX);
+  }
 
   function init() {
     if (ready) return;
@@ -60,6 +64,7 @@ const Admin = (() => {
   // PRODUCTS
   async function resolveProductImage(product) {
     if (product.imageUrl) return { ...product, resolvedImageUrl: product.imageUrl };
+    if (isCloudinaryImagePath(product.imagePath)) return { ...product, resolvedImageUrl: null };
     if (!product.imagePath || !window.storage) return { ...product, resolvedImageUrl: null };
 
     try {
@@ -163,13 +168,15 @@ const Admin = (() => {
   async function validateImageFile(file) {
     if (!file) throw new Error('Selecciona una imagen');
     const extension = file.name.split('.').pop()?.toLowerCase() || '';
-    if (!ALLOWED_IMAGE_EXTENSIONS.has(extension) || (file.type && !ALLOWED_IMAGE_TYPES.has(file.type))) {
-      throw new Error('Formato no permitido. Usa JPG, JPEG, PNG, WEBP, GIF o SVG');
+    const mime = String(file.type || '').toLowerCase();
+    const looksLikeImage = mime.startsWith('image/') || COMMON_IMAGE_EXTENSIONS.has(extension);
+    if (!looksLikeImage) {
+      throw new Error('El archivo seleccionado no parece ser una imagen compatible');
     }
-    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 5 MB');
+    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 10 MB');
     if (file.size === 0) throw new Error('El archivo está vacío');
 
-    if (extension === 'svg') {
+    if (extension === 'svg' || mime === 'image/svg+xml') {
       const content = await file.text();
       if (!/<svg[\s>]/i.test(content) || /<script[\s>]/i.test(content) || /\son[a-z]+\s*=/i.test(content)) {
         throw new Error('El archivo SVG contiene contenido no permitido');
@@ -240,39 +247,84 @@ const Admin = (() => {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('productModal')).show();
   }
 
-  function sanitizeFileName(name) {
-    return String(name || 'imagen')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-zA-Z0-9._-]/g, '-')
-      .replace(/-+/g, '-')
-      .toLowerCase();
+  function getMediaApiBaseUrl() {
+    return String(
+      window.KIOSCO_UPGRADE_CONFIG?.mediaApiBaseUrl
+      || window.KIOSCO_UPGRADE_CONFIG?.apiBaseUrl
+      || ''
+    ).trim().replace(/\/+$/, '');
+  }
+
+  async function getCurrentAdminToken() {
+    const user = window.auth?.currentUser;
+    if (!user) throw new Error('Debes iniciar sesión como administrador para gestionar imágenes');
+    return user.getIdToken(true);
+  }
+
+  async function requestMediaApi(action, payload = {}) {
+    const baseUrl = getMediaApiBaseUrl();
+    if (!baseUrl) {
+      throw new Error('Configura mediaApiBaseUrl en web/js/kiosco-upgrade-config.js');
+    }
+
+    const token = await getCurrentAdminToken();
+    const response = await fetch(`${baseUrl}/api/media`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ action, ...payload })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'No se pudo completar la operación de imagen');
+    return data;
+  }
+
+  function toCloudinaryDeliveryUrl(url) {
+    const raw = String(url || '');
+    if (!raw.includes('res.cloudinary.com') || !raw.includes('/image/upload/')) return raw;
+    return raw.replace('/image/upload/', '/image/upload/f_auto,q_auto/');
   }
 
   async function uploadProductImage(productId, file) {
-    if (!window.storage) throw new Error('Firebase Storage no está disponible');
     await validateImageFile(file);
-    const path = `products/${productId}/${Date.now()}-${sanitizeFileName(file.name)}`;
-    const reference = window.storage.ref(path);
-    const extension = file.name.split('.').pop()?.toLowerCase() || '';
-    const contentTypeByExtension = {
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      png: 'image/png',
-      webp: 'image/webp',
-      gif: 'image/gif',
-      svg: 'image/svg+xml'
-    };
-    await reference.put(file, {
-      contentType: file.type || contentTypeByExtension[extension],
-      cacheControl: 'public,max-age=31536000,immutable',
-      customMetadata: { productId }
+    const ticket = await requestMediaApi('sign-upload', { productId, filename: file.name });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('api_key', ticket.apiKey);
+    formData.append('signature', ticket.signature);
+    Object.entries(ticket.signedParams || {}).forEach(([key, value]) => {
+      formData.append(key, String(value));
     });
-    return path;
+
+    const response = await fetch(ticket.uploadUrl, { method: 'POST', body: formData });
+    const asset = await response.json().catch(() => ({}));
+    if (!response.ok || !asset.secure_url || !asset.public_id) {
+      throw new Error(asset?.error?.message || 'Cloudinary no pudo guardar la imagen');
+    }
+
+    return {
+      imagePath: `${CLOUDINARY_PATH_PREFIX}${asset.public_id}`,
+      imageUrl: toCloudinaryDeliveryUrl(asset.secure_url)
+    };
   }
 
   async function deleteStorageImage(path) {
-    if (!path || !window.storage) return;
+    if (!path) return;
+
+    if (isCloudinaryImagePath(path)) {
+      const publicId = String(path).slice(CLOUDINARY_PATH_PREFIX.length);
+      if (!publicId) return;
+      try {
+        await requestMediaApi('destroy', { publicId });
+      } catch (error) {
+        console.warn('No se pudo eliminar la imagen externa anterior:', error?.message || error);
+      }
+      return;
+    }
+
+    if (!window.storage) return;
     try {
       await window.storage.ref(path).delete();
       productImageUrlCache.delete(path);
@@ -340,15 +392,25 @@ const Admin = (() => {
       };
 
       if (selectedProductImageFile) {
-        uploadedImagePath = await uploadProductImage(productReference.id, selectedProductImageFile);
-        data.imagePath = uploadedImagePath;
-        data.imageUrl = null;
+        const uploadedImage = await uploadProductImage(productReference.id, selectedProductImageFile);
+        uploadedImagePath = uploadedImage.imagePath;
+        data.imagePath = uploadedImage.imagePath;
+        data.imageUrl = uploadedImage.imageUrl;
+      } else if (
+        id
+        && isCloudinaryImagePath(currentProductImagePath)
+        && enteredImageUrl === String(currentProductImageUrl || '').trim()
+      ) {
+        data.imagePath = currentProductImagePath;
+        data.imageUrl = currentProductImageUrl || null;
       } else if (enteredImageUrl) {
         data.imagePath = null;
         data.imageUrl = enteredImageUrl;
       } else if (id) {
         data.imagePath = currentProductImagePath || null;
-        data.imageUrl = currentProductImagePath ? null : (currentProductImageUrl || null);
+        data.imageUrl = isCloudinaryImagePath(currentProductImagePath)
+          ? (currentProductImageUrl || null)
+          : (currentProductImagePath ? null : (currentProductImageUrl || null));
       } else {
         data.imagePath = null;
         data.imageUrl = null;
