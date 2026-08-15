@@ -4,12 +4,14 @@ const Admin = (() => {
   let selectedProductImageFile = null;
   let productSaveInProgress = false;
   let currentProductImagePath = null;
+  let currentProductStoredImageUrl = null;
   let currentProductImageUrl = null;
-  let previewObjectUrl = null;
+  let imageRemovalRequested = false;
   const productImageUrlCache = new Map();
   const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-  const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']);
-  const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg']);
+  const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+  const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
+  const XLSX_CDN = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
 
   function init() {
     if (ready) return;
@@ -17,6 +19,7 @@ const Admin = (() => {
     subscribeAll();
     bindNav();
     bindProductModal();
+    bindProductsTemplateEnhancement();
     bindCategoryModal();
     bindStaffModal();
     loadBranding();
@@ -93,7 +96,7 @@ const Admin = (() => {
           <div class="card h-100 ${product.active === false ? 'opacity-50' : ''}">
             <div class="card-img-wrap" style="height:140px;overflow:hidden">
               ${imageUrl
-                ? `<img src="${esc(imageUrl)}" alt="${esc(product.name)}" loading="lazy" decoding="async" class="card-img-top h-100 w-100" style="object-fit:cover" onerror="this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 bg-secondary\'><i class=\'bi bi-image text-white display-5\'></i></div>'">`
+                ? `<img src="${esc(imageUrl)}" alt="${esc(product.name)}" loading="lazy" decoding="async" class="card-img-top h-100 w-100" style="object-fit:cover" onerror="this.parentElement.innerHTML='<div class=\\'d-flex align-items-center justify-content-center h-100 bg-secondary\\'><i class=\\'bi bi-image text-white display-5\\'></i></div>'">`
                 : '<div class="d-flex align-items-center justify-content-center h-100 bg-secondary"><i class="bi bi-bag display-5 text-white"></i></div>'}
             </div>
             <div class="card-body p-2">
@@ -116,20 +119,175 @@ const Admin = (() => {
   }
 
   function bindProductModal() {
+    ensureProductImageUploadUi();
     document.getElementById('btnAddProduct')?.addEventListener('click', () => openProductModal(null));
     document.getElementById('productForm')?.addEventListener('submit', saveProduct);
-    document.getElementById('productImageUrl')?.addEventListener('input', event => {
-      if (selectedProductImageFile) return;
-      currentProductImageUrl = event.target.value.trim() || null;
-      setProductPreview(currentProductImageUrl);
-    });
+    document.getElementById('productImageUrl')?.addEventListener('input', handleProductImageUrlInput);
     document.getElementById('productImageFile')?.addEventListener('change', handleProductImageSelection);
+    document.getElementById('productImageDeleteBtn')?.addEventListener('click', () => void removeCurrentProductImage());
+    document.getElementById('productImageUrlToggle')?.addEventListener('click', toggleImageUrlFallback);
+
+    const dropzone = document.getElementById('productImageDropzone');
+    const fileInput = document.getElementById('productImageFile');
+    if (dropzone && fileInput) {
+      dropzone.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          fileInput.click();
+        }
+      });
+      ['dragenter', 'dragover'].forEach(name => dropzone.addEventListener(name, event => {
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.add('is-dragover');
+      }));
+      ['dragleave', 'dragend'].forEach(name => dropzone.addEventListener(name, event => {
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.remove('is-dragover');
+      }));
+      dropzone.addEventListener('drop', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.remove('is-dragover');
+        const file = event.dataTransfer?.files?.[0] || null;
+        if (file) void selectProductImageFile(file);
+      });
+    }
   }
 
-  function revokePreviewObjectUrl() {
-    if (!previewObjectUrl) return;
-    URL.revokeObjectURL(previewObjectUrl);
-    previewObjectUrl = null;
+  function ensureProductImageUploadUi() {
+    const fileInput = document.getElementById('productImageFile');
+    if (!fileInput) return;
+    const uploadColumn = fileInput.closest('.col-12') || fileInput.parentElement;
+    if (!uploadColumn || document.getElementById('productImageDropzone')) return;
+
+    uploadColumn.innerHTML = `
+      <label class="form-label fw-semibold mb-2">Imagen del producto</label>
+      <div id="productImageDropzone" class="product-image-dropzone" role="button" tabindex="0" aria-controls="productImageFile" aria-label="Seleccionar imagen del producto">
+        <i class="bi bi-cloud-upload product-image-dropzone-icon" aria-hidden="true"></i>
+        <div class="fw-semibold mt-2">Arrastra una imagen aquí o haz clic para seleccionar</div>
+        <small class="text-body-secondary mt-1">JPG, PNG, WEBP o GIF · máximo 5 MB</small>
+      </div>
+      <input type="file" id="productImageFile" class="d-none" accept="image/jpeg,image/png,image/webp,image/gif" />
+      <div id="productImageUploadProgress" class="progress mt-2 d-none" role="progressbar" aria-label="Progreso de subida" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="productImageUploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%">0%</div>
+      </div>
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+        <button type="button" id="productImageDeleteBtn" class="btn btn-outline-danger btn-sm d-none">
+          <i class="bi bi-trash me-1"></i>Eliminar imagen
+        </button>
+        <button type="button" id="productImageUrlToggle" class="btn btn-link btn-sm p-0 ms-auto text-decoration-none">
+          ¿Prefieres usar una URL?
+        </button>
+      </div>
+      <div id="productImageUploadStatus" class="small mt-2" aria-live="polite"></div>`;
+
+    const urlInput = document.getElementById('productImageUrl');
+    const urlColumn = urlInput?.closest('.col-12');
+    if (urlColumn) {
+      urlColumn.id = 'productImageUrlFallback';
+      urlColumn.classList.add('d-none');
+      const label = urlColumn.querySelector('label');
+      if (label) label.textContent = 'URL externa alternativa';
+      urlInput.placeholder = 'https://ejemplo.com/imagen.jpg';
+      urlInput.insertAdjacentHTML('afterend', '<div class="form-text">La URL debe ser pública y accesible mediante HTTP o HTTPS.</div>');
+    }
+
+    if (!document.getElementById('productImageStorageStyles')) {
+      const style = document.createElement('style');
+      style.id = 'productImageStorageStyles';
+      style.textContent = `
+        .product-image-dropzone {
+          height: 140px;
+          width: 100%;
+          border: 2px dashed var(--accent, #f97316);
+          border-radius: var(--bs-border-radius-lg, .5rem);
+          background: rgba(var(--accent-rgb, 249, 115, 22), .08);
+          color: var(--bs-body-color);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          padding: 1rem;
+          cursor: pointer;
+          transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
+        }
+        .product-image-dropzone:hover,
+        .product-image-dropzone:focus-visible,
+        .product-image-dropzone.is-dragover {
+          background: rgba(var(--accent-rgb, 249, 115, 22), .16);
+          outline: none;
+          transform: translateY(-1px);
+        }
+        .product-image-dropzone:focus-visible {
+          box-shadow: 0 0 0 .25rem rgba(var(--accent-rgb, 249, 115, 22), .22);
+        }
+        .product-image-dropzone-icon {
+          font-size: 2rem;
+          color: var(--accent, #f97316);
+          line-height: 1;
+        }
+        [data-bs-theme="dark"] .product-image-dropzone {
+          background: rgba(var(--accent-rgb, 249, 115, 22), .12);
+        }
+        #productImageUploadProgress { height: 1.25rem; }
+        #productImageUploadProgressBar { min-width: 2.5rem; }
+        @media (max-width: 575.98px) {
+          .product-image-dropzone { padding-inline: .75rem; }
+          .product-image-dropzone-icon { font-size: 1.75rem; }
+        }`;
+      document.head.appendChild(style);
+    }
+  }
+
+  function toggleImageUrlFallback() {
+    const column = document.getElementById('productImageUrlFallback');
+    const toggle = document.getElementById('productImageUrlToggle');
+    if (!column) return;
+    const willShow = column.classList.contains('d-none');
+    column.classList.toggle('d-none', !willShow);
+    if (toggle) toggle.textContent = willShow ? 'Ocultar URL alternativa' : '¿Prefieres usar una URL?';
+    if (willShow) document.getElementById('productImageUrl')?.focus();
+  }
+
+  function setUrlFallbackVisible(visible) {
+    const column = document.getElementById('productImageUrlFallback');
+    const toggle = document.getElementById('productImageUrlToggle');
+    column?.classList.toggle('d-none', !visible);
+    if (toggle) toggle.textContent = visible ? 'Ocultar URL alternativa' : '¿Prefieres usar una URL?';
+  }
+
+  function setImageDeleteButtonVisible(visible) {
+    document.getElementById('productImageDeleteBtn')?.classList.toggle('d-none', !visible);
+  }
+
+  function setProductImageStatus(message = '', type = 'body-secondary') {
+    const status = document.getElementById('productImageUploadStatus');
+    if (!status) return;
+    status.className = `small mt-2 text-${type}`;
+    status.textContent = message;
+  }
+
+  function setUploadProgress(percent, visible = true) {
+    const wrapper = document.getElementById('productImageUploadProgress');
+    const bar = document.getElementById('productImageUploadProgressBar');
+    const safe = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    wrapper?.classList.toggle('d-none', !visible);
+    wrapper?.setAttribute('aria-valuenow', String(safe));
+    if (bar) {
+      bar.style.width = `${safe}%`;
+      bar.textContent = `${safe}%`;
+      bar.classList.toggle('progress-bar-animated', safe < 100);
+    }
+  }
+
+  function resetUploadProgress() {
+    setUploadProgress(0, false);
+    const bar = document.getElementById('productImageUploadProgressBar');
+    bar?.classList.add('progress-bar-animated');
   }
 
   function setProductPreview(source) {
@@ -161,42 +319,178 @@ const Admin = (() => {
     preview.src = source;
   }
 
-  async function validateImageFile(file) {
+  function validateImageFile(file) {
     if (!file) throw new Error('Selecciona una imagen');
     const extension = file.name.split('.').pop()?.toLowerCase() || '';
-    if (!ALLOWED_IMAGE_EXTENSIONS.has(extension) || (file.type && !ALLOWED_IMAGE_TYPES.has(file.type))) {
-      throw new Error('Formato no permitido. Usa JPG, JPEG, PNG, WEBP, GIF o SVG');
+    if (!ALLOWED_IMAGE_TYPES.has(file.type) || !ALLOWED_IMAGE_EXTENSIONS.has(extension)) {
+      throw new Error('Tipo de archivo no permitido. Usa JPG, PNG, WEBP o GIF');
     }
-    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 5 MB');
+    if (file.size > MAX_IMAGE_SIZE) throw new Error('La imagen no debe superar 5MB');
     if (file.size === 0) throw new Error('El archivo está vacío');
+    return true;
+  }
 
-    if (extension === 'svg') {
-      const content = await file.text();
-      if (!/<svg[\s>]/i.test(content) || /<script[\s>]/i.test(content) || /\son[a-z]+\s*=/i.test(content)) {
-        throw new Error('El archivo SVG contiene contenido no permitido');
-      }
+  function readImageAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener('load', () => resolve(String(reader.result || '')), { once: true });
+      reader.addEventListener('error', () => reject(new Error('No se pudo leer la imagen seleccionada')), { once: true });
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function selectProductImageFile(file) {
+    try {
+      validateImageFile(file);
+      selectedProductImageFile = file;
+      imageRemovalRequested = false;
+      const previewDataUrl = await readImageAsDataUrl(file);
+      setProductPreview(previewDataUrl);
+      setImageDeleteButtonVisible(true);
+      setProductImageStatus(`${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`, 'body-secondary');
+      resetUploadProgress();
+    } catch (error) {
+      selectedProductImageFile = null;
+      const fileInput = document.getElementById('productImageFile');
+      if (fileInput) fileInput.value = '';
+      setProductPreview(currentProductImageUrl);
+      setImageDeleteButtonVisible(Boolean(currentProductImageUrl || currentProductImagePath));
+      showToast(error.message, 'danger');
     }
   }
 
   async function handleProductImageSelection(event) {
     const file = event.target.files?.[0] || null;
-    selectedProductImageFile = null;
-    revokePreviewObjectUrl();
-
     if (!file) {
+      selectedProductImageFile = null;
       setProductPreview(currentProductImageUrl);
       return;
     }
+    await selectProductImageFile(file);
+  }
+
+  function handleProductImageUrlInput(event) {
+    const value = event.target.value.trim();
+    if (value && selectedProductImageFile) {
+      selectedProductImageFile = null;
+      const fileInput = document.getElementById('productImageFile');
+      if (fileInput) fileInput.value = '';
+      resetUploadProgress();
+    }
+    imageRemovalRequested = false;
+    setProductPreview(value || currentProductImageUrl);
+    setImageDeleteButtonVisible(Boolean(value || currentProductImageUrl || currentProductImagePath));
+  }
+
+  function isFirebaseStorageUrl(url) {
+    try {
+      return Boolean(url) && new URL(url).hostname.includes('firebasestorage.googleapis.com');
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function isValidHttpUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function uploadProductImage(file, productId) {
+    validateImageFile(file);
+    if (!window.storage) throw new Error('Firebase Storage no está inicializado');
+    const ext = file.name.split('.').pop().toLowerCase();
+    const path = `products/${productId || 'temp'}/${Date.now()}.${ext}`;
+    const ref = window.storage.ref(path);
+    return ref.put(file, { contentType: file.type });
+  }
+
+  window.uploadProductImage = uploadProductImage;
+
+  function waitForUpload(task) {
+    return new Promise((resolve, reject) => {
+      task.on('state_changed', snapshot => {
+        const progress = snapshot.totalBytes > 0
+          ? (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+          : 0;
+        setUploadProgress(progress, true);
+        setProductImageStatus(`Subiendo imagen… ${Math.round(progress)}%`, 'body-secondary');
+      }, reject, () => {
+        setUploadProgress(100, true);
+        resolve(task.snapshot);
+      });
+    });
+  }
+
+  async function deleteFirebaseStorageUrl(url) {
+    if (!isFirebaseStorageUrl(url) || !window.storage) return;
+    await window.storage.refFromURL(url).delete().catch(() => {});
+  }
+
+  async function deleteImagePath(path) {
+    if (!path || !String(path).startsWith('products/') || !window.storage) return;
+    await window.storage.ref(path).delete().catch(() => {});
+    productImageUrlCache.delete(path);
+  }
+
+  async function cleanupPreviousImage(product, replacementUrl = null) {
+    if (!product) return;
+    if (product.imageUrl && product.imageUrl !== replacementUrl && isFirebaseStorageUrl(product.imageUrl)) {
+      await deleteFirebaseStorageUrl(product.imageUrl);
+    }
+    if (product.imagePath) await deleteImagePath(product.imagePath);
+  }
+
+  async function removeCurrentProductImage() {
+    const id = document.getElementById('productId')?.value || '';
+    const product = id ? prods.find(item => item.id === id) : null;
+    const hasPersistedImage = Boolean(product?.imageUrl || product?.imagePath || currentProductStoredImageUrl || currentProductImagePath);
+
+    if (hasPersistedImage && !window.confirm('¿Eliminar la imagen actual del producto?')) return;
+
+    const button = document.getElementById('productImageDeleteBtn');
+    const originalHtml = button?.innerHTML;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Eliminando';
+    }
 
     try {
-      await validateImageFile(file);
-      selectedProductImageFile = file;
-      previewObjectUrl = URL.createObjectURL(file);
-      setProductPreview(previewObjectUrl);
+      if (id && hasPersistedImage) {
+        await db.collection(COLL.products).doc(id).update({
+          imageUrl: null,
+          imagePath: null,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await cleanupPreviousImage(product || {
+          imageUrl: currentProductStoredImageUrl,
+          imagePath: currentProductImagePath
+        });
+      }
+
+      selectedProductImageFile = null;
+      currentProductImagePath = null;
+      currentProductStoredImageUrl = null;
+      currentProductImageUrl = null;
+      imageRemovalRequested = true;
+      const fileInput = document.getElementById('productImageFile');
+      const urlInput = document.getElementById('productImageUrl');
+      if (fileInput) fileInput.value = '';
+      if (urlInput) urlInput.value = '';
+      setProductPreview(null);
+      resetUploadProgress();
+      setProductImageStatus(id && hasPersistedImage ? 'Imagen eliminada' : '', id && hasPersistedImage ? 'success' : 'body-secondary');
+      setImageDeleteButtonVisible(false);
     } catch (error) {
-      event.target.value = '';
-      setProductPreview(currentProductImageUrl);
-      showToast(error.message, 'danger');
+      showToast(`No se pudo eliminar la imagen: ${error.message}`, 'danger');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+      }
     }
   }
 
@@ -205,17 +499,23 @@ const Admin = (() => {
     if (!form) return;
 
     form.reset();
-    revokePreviewObjectUrl();
     selectedProductImageFile = null;
     currentProductImagePath = null;
+    currentProductStoredImageUrl = null;
     currentProductImageUrl = null;
+    imageRemovalRequested = false;
     document.getElementById('productId').value = '';
     document.getElementById('productModalTitle').textContent = id ? 'Editar Producto' : 'Nuevo Producto';
     document.getElementById('productActive').checked = true;
     document.getElementById('productUnit').value = 'Unidad';
     document.getElementById('productDiscount').value = '0';
+    const fileInput = document.getElementById('productImageFile');
+    if (fileInput) fileInput.value = '';
     setProductPreview(null);
-    document.getElementById('productImageUploadStatus')?.replaceChildren();
+    setProductImageStatus('');
+    setImageDeleteButtonVisible(false);
+    setUrlFallbackVisible(false);
+    resetUploadProgress();
     populateCatSelect();
 
     if (id) {
@@ -230,72 +530,21 @@ const Admin = (() => {
       document.getElementById('productUnit').value = product.unit || 'Unidad';
       document.getElementById('productDiscount').value = Number(product.discountPercent || 0);
       document.getElementById('productEmoji').value = product.emoji || '';
-      document.getElementById('productImageUrl').value = product.imageUrl || '';
       document.getElementById('productActive').checked = product.active !== false;
       document.getElementById('productCategory').value = product.categoryId || '';
       fillSubcatSelect(product.categoryId, product.subcategoryId);
+
       currentProductImagePath = product.imagePath || null;
+      currentProductStoredImageUrl = product.imageUrl || null;
       currentProductImageUrl = product.resolvedImageUrl || product.imageUrl || null;
+      const externalUrl = product.imageUrl && !isFirebaseStorageUrl(product.imageUrl) ? product.imageUrl : '';
+      document.getElementById('productImageUrl').value = externalUrl;
+      setUrlFallbackVisible(Boolean(externalUrl));
       setProductPreview(currentProductImageUrl);
+      setImageDeleteButtonVisible(Boolean(currentProductImageUrl || currentProductImagePath));
     }
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('productModal')).show();
-  }
-
-  function sanitizeFileName(name) {
-    return String(name || 'imagen')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-zA-Z0-9._-]/g, '-')
-      .replace(/-+/g, '-')
-      .toLowerCase();
-  }
-
-  async function uploadProductImage(productId, file) {
-    await validateImageFile(file);
-    if (!window.KioscoMedia?.upload) {
-      throw new Error('El módulo de imágenes no está cargado. Recarga la aplicación e inténtalo nuevamente.');
-    }
-    const status = document.getElementById('productImageUploadStatus');
-    if (status) status.innerHTML = '<i class="bi bi-image me-1"></i>Optimizando imagen…';
-    const asset = await window.KioscoMedia.upload(file, {
-      scope: 'productos',
-      entityId: productId,
-      maxBytes: MAX_IMAGE_SIZE,
-      onProgress(percent) {
-        if (!status) return;
-        const label = percent < 45 ? 'Optimizando imagen' : percent < 100 ? 'Guardando en el repositorio' : 'Imagen procesada';
-        status.innerHTML = '<div class="d-flex align-items-center justify-content-between gap-2"><span><i class="bi bi-cloud-arrow-up me-1"></i>' + label + '</span><strong>' + percent + '%</strong></div><div class="progress mt-1" role="progressbar" aria-valuenow="' + percent + '" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:' + percent + '%"></div></div>';
-      }
-    });
-    if (status) {
-      status.innerHTML = asset.pendingDeploy
-        ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Guardada en GitHub. Firebase Hosting se actualizará con el despliegue automático.</span>'
-        : '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Guardada en web/uploads del repositorio local.</span>';
-    }
-    return { imagePath: asset.path, imageUrl: asset.url, pendingDeploy: asset.pendingDeploy };
-  }
-
-  async function deleteStorageImage(path) {
-    if (!path) return;
-    if (isRepositoryImagePath(path)) {
-      try { await window.KioscoMedia?.remove?.(path); }
-      catch (error) { console.warn('No se pudo eliminar la imagen del repositorio:', error?.message || error); }
-      return;
-    }
-    if (isCloudinaryImagePath(path)) {
-      // Compatibilidad con imágenes históricas. Ya no se crean nuevos assets Cloudinary.
-      return;
-    }
-    if (!window.storage) return;
-    try {
-      await window.storage.ref(path).delete();
-      productImageUrlCache.delete(path);
-    } catch (error) {
-      if (error?.code !== 'storage/object-not-found') {
-        console.warn('No se pudo eliminar la imagen anterior:', error?.message || error);
-      }
-    }
   }
 
   async function saveProduct(event) {
@@ -304,6 +553,7 @@ const Admin = (() => {
     productSaveInProgress = true;
 
     const id = document.getElementById('productId').value;
+    const existingProduct = id ? prods.find(item => item.id === id) : null;
     const name = document.getElementById('productName').value.trim();
     const price = Number(document.getElementById('productPrice').value);
     const stockRaw = document.getElementById('productStock').value.trim();
@@ -331,6 +581,11 @@ const Admin = (() => {
       productSaveInProgress = false;
       return;
     }
+    if (!selectedProductImageFile && enteredImageUrl && !isValidHttpUrl(enteredImageUrl)) {
+      showToast('La URL de imagen debe usar HTTP o HTTPS', 'danger');
+      productSaveInProgress = false;
+      return;
+    }
 
     const button = event.submitter;
     const originalButtonHtml = button?.innerHTML;
@@ -342,9 +597,7 @@ const Admin = (() => {
     const productReference = id
       ? db.collection(COLL.products).doc(id)
       : db.collection(COLL.products).doc();
-    const previousImagePath = currentProductImagePath;
-    let uploadedImagePath = null;
-    let uploadedImagePendingDeploy = false;
+    let uploadedImageUrl = null;
 
     try {
       const data = {
@@ -362,18 +615,23 @@ const Admin = (() => {
       };
 
       if (selectedProductImageFile) {
-        uploadedImagePath = await uploadProductImage(productReference.id, selectedProductImageFile);
-        data.imagePath = uploadedImagePath;
-        data.imageUrl = null;
+        const task = uploadProductImage(selectedProductImageFile, productReference.id);
+        const snapshot = await waitForUpload(task);
+        uploadedImageUrl = await snapshot.ref.getDownloadURL();
+        data.imageUrl = uploadedImageUrl;
+        data.imagePath = null;
       } else if (enteredImageUrl) {
-        data.imagePath = null;
         data.imageUrl = enteredImageUrl;
-      } else if (id) {
-        data.imagePath = currentProductImagePath || null;
-        data.imageUrl = currentProductImagePath ? null : (currentProductImageUrl || null);
-      } else {
         data.imagePath = null;
+      } else if (imageRemovalRequested) {
         data.imageUrl = null;
+        data.imagePath = null;
+      } else if (id) {
+        data.imageUrl = existingProduct?.imageUrl || null;
+        data.imagePath = existingProduct?.imagePath || null;
+      } else {
+        data.imageUrl = null;
+        data.imagePath = null;
       }
 
       if (id) {
@@ -383,21 +641,22 @@ const Admin = (() => {
         await productReference.set(data);
       }
 
-      if (previousImagePath && previousImagePath !== data.imagePath) {
-        await deleteStorageImage(previousImagePath);
-      }
+      const imageChanged = Boolean(selectedProductImageFile)
+        || Boolean(enteredImageUrl && enteredImageUrl !== (existingProduct?.imageUrl || ''))
+        || imageRemovalRequested;
+      if (id && imageChanged) await cleanupPreviousImage(existingProduct, data.imageUrl);
 
-      showToast(uploadedImagePendingDeploy ? (id ? 'Producto actualizado. La imagen se está publicando en Hosting.' : 'Producto creado. La imagen se está publicando en Hosting.') : (id ? 'Producto actualizado' : 'Producto creado'), 'success');
+      if (uploadedImageUrl) {
+        setProductImageStatus('Imagen subida correctamente a Firebase Storage', 'success');
+      }
+      showToast(id ? 'Producto actualizado' : 'Producto creado', 'success');
       bootstrap.Modal.getInstance(document.getElementById('productModal'))?.hide();
       selectedProductImageFile = null;
-      revokePreviewObjectUrl();
     } catch (error) {
-      if (uploadedImagePath) await deleteStorageImage(uploadedImagePath);
+      if (uploadedImageUrl) await deleteFirebaseStorageUrl(uploadedImageUrl);
       showToast(`No se pudo guardar el producto: ${error.message}`, 'danger');
     } finally {
       productSaveInProgress = false;
-      const status = document.getElementById('productImageUploadStatus');
-      if (status && !selectedProductImageFile) status.innerHTML = '';
       if (button) {
         button.disabled = false;
         button.innerHTML = originalButtonHtml;
@@ -414,11 +673,99 @@ const Admin = (() => {
     if (!window.confirm(`¿Eliminar "${product?.name || 'producto'}"?`)) return;
 
     try {
+      if (product?.imageUrl?.includes('firebasestorage.googleapis.com') && window.storage) {
+        await window.storage.refFromURL(product.imageUrl).delete().catch(() => {});
+      }
+      if (product?.imagePath) await deleteImagePath(product.imagePath);
       await db.collection(COLL.products).doc(id).delete();
-      await deleteStorageImage(product?.imagePath);
       showToast('Producto eliminado', 'info');
     } catch (error) {
       showToast(`No se pudo eliminar el producto: ${error.message}`, 'danger');
+    }
+  }
+
+  function bindProductsTemplateEnhancement() {
+    document.addEventListener('click', event => {
+      const button = event.target.closest?.('#downloadProductsTemplateBtn');
+      if (!button) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void downloadProductsTemplateWithStorageNote();
+    }, true);
+  }
+
+  function loadScript(source, globalName) {
+    if (globalName && window[globalName]) return Promise.resolve(window[globalName]);
+    return new Promise((resolve, reject) => {
+      const existing = [...document.scripts].find(script => script.src === source);
+      if (existing) {
+        existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
+        existing.addEventListener('error', () => reject(new Error(`No se pudo cargar ${source}`)), { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = source;
+      script.async = true;
+      script.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
+      script.addEventListener('error', () => reject(new Error(`No se pudo cargar ${source}`)), { once: true });
+      document.head.appendChild(script);
+    });
+  }
+
+  async function downloadProductsTemplateWithStorageNote() {
+    try {
+      await loadScript(XLSX_CDN, 'XLSX');
+      if (!window.XLSX) throw new Error('SheetJS no está disponible');
+      const main = cats.find(category => !category.parentId);
+      const sub = cats.find(category => category.parentId === main?.id) || cats.find(category => category.parentId);
+      const rows = [
+        {
+          nombre: 'Producto de ejemplo',
+          descripcion: 'Descripción completa del producto',
+          precio: 9.9,
+          stock: 25,
+          categoria: main?.name || 'Nombre de categoría existente',
+          subcategoria: sub?.name || '',
+          imageUrl: 'https://ejemplo.com/imagen.jpg',
+          activo: 'SI'
+        },
+        {
+          nombre: 'Producto con stock ilimitado',
+          descripcion: '',
+          precio: 5.5,
+          stock: '',
+          categoria: main?.name || '',
+          subcategoria: '',
+          imageUrl: '',
+          activo: 'SI'
+        }
+      ];
+      const headers = ['nombre', 'descripcion', 'precio', 'stock', 'categoria', 'subcategoria', 'imageUrl', 'activo'];
+      const sheet = window.XLSX.utils.json_to_sheet(rows, { header: headers });
+      sheet['!cols'] = [{ wch: 30 }, { wch: 45 }, { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 24 }, { wch: 45 }, { wch: 10 }];
+      if (sheet.G1) {
+        sheet.G1.c = [{
+          a: 'Kiosco',
+          t: 'Las URLs de imageUrl deben ser públicas y accesibles por HTTP/HTTPS. Las URLs externas se mantienen como están y no se descargan ni se vuelven a subir durante la importación.'
+        }];
+      }
+      const instructions = window.XLSX.utils.aoa_to_sheet([
+        ['IMPORTACIÓN DE PRODUCTOS - NOTAS'],
+        ['Campo', 'Regla'],
+        ['imageUrl', 'Usa una URL pública y accesible por HTTP o HTTPS.'],
+        ['imageUrl', 'Las URLs externas se conservan sin descargar ni re-subir a Firebase Storage.'],
+        ['Imágenes nuevas', 'Para subir archivos a Firebase Storage usa el formulario de creación/edición de producto del panel administrador.'],
+        ['Formatos de subida', 'JPG/JPEG, PNG, WEBP o GIF; máximo 5 MB.']
+      ]);
+      instructions['!cols'] = [{ wch: 22 }, { wch: 95 }];
+      const workbook = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(workbook, sheet, 'Productos');
+      window.XLSX.utils.book_append_sheet(workbook, instructions, 'INSTRUCCIONES');
+      window.XLSX.writeFile(workbook, 'plantilla-importacion-productos.xlsx', { compression: true });
+      showToast('Plantilla descargada', 'success');
+    } catch (error) {
+      console.error('Plantilla Excel:', error);
+      showToast(`No se pudo generar la plantilla: ${error.message}`, 'danger');
     }
   }
 

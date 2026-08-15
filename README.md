@@ -179,7 +179,7 @@ Los recibos locales son documentos comerciales informativos. La emisión electr�
 <!-- KIOSCO_NINE_IMPROVEMENTS:README_VERSION=2 -->
 ## Mejoras de catálogo, gastos, inventario y analítica (2026-08)
 
-Esta versión incorpora nueve mejoras incrementales en el frontend Vanilla JavaScript, Bootstrap 5.3 y Firebase Spark. No agrega dependencias npm al frontend, no usa Cloud Functions y no requiere índices compuestos de Firestore. Las consultas nuevas no combinan `where()` con `orderBy()`; el filtrado y ordenamiento se ejecutan en memoria.
+Esta versión incorpora nueve mejoras incrementales en el frontend Vanilla JavaScript, Bootstrap 5.3 y Firebase. No agrega dependencias npm al frontend, no usa Cloud Functions y no requiere índices compuestos de Firestore. Las consultas nuevas no combinan `where()` con `orderBy()`; el filtrado y ordenamiento se ejecutan en memoria.
 
 | Mejora | Cobertura |
 |---|---|
@@ -274,37 +274,85 @@ También se actualizaron `web/index.html`, `web/js/firebase.js`, `web/js/cart.js
 ```bash
 for file in web/js/*.js; do node --check "$file" || exit 1; done
 firebase deploy --only firestore:rules
+firebase deploy --only storage
 firebase deploy --only hosting
 ```
 
 Para desplegar reglas y hosting en una sola operación:
 
 ```bash
-firebase deploy --only firestore:rules,hosting
+firebase deploy --only firestore:rules,storage,hosting
 ```
 
 Después del despliegue, conviene cerrar y volver a abrir la PWA o aceptar la actualización del Service Worker para cargar la nueva versión del app shell.
 <!-- KIOSCO_NINE_IMPROVEMENTS:README_END -->
 
+<!-- KIOSCO_FIREBASE_STORAGE_PRODUCTS_V1 -->
+## Imágenes de productos con Firebase Storage
 
+Las imágenes nuevas de productos se almacenan directamente en Cloud Storage for Firebase. El navegador sube el archivo al bucket del proyecto y Firestore conserva la `downloadURL` en el campo `imageUrl`. Los productos históricos que ya tengan una URL externa continúan funcionando sin migración obligatoria.
 
+### Requisito de facturación vigente
 
-<!-- KIOSCO_REPOSITORY_MEDIA_V120 -->
-## ⚙️ Cómo funciona la carga de imágenes
+Desde el 3 de febrero de 2026, Cloud Storage for Firebase requiere que el proyecto esté en el plan Blaze para mantener acceso al bucket. Blaze exige una cuenta de facturación vinculada; el uso puede seguir quedando dentro de las cuotas sin costo aplicables, pero Storage ya no está disponible para proyectos que permanezcan en Spark.
 
-- **Local:** ejecuta el frontend y `kiosco-api`; el endpoint guarda la imagen directamente en `web/uploads/`.
-- **Producción:** el mismo endpoint usa GitHub Contents API con un token privado almacenado únicamente en el backend. Cada carga crea o reemplaza el archivo del producto en la rama configurada.
-- **Rendimiento:** antes de enviar, Kiosco redimensiona la imagen a un máximo de 1600 px, genera WEBP y limita el archivo final a 800 KB (objetivo 500 KB). El catálogo usa carga diferida de imágenes y Firebase Hosting sirve los archivos publicados.
-- **Seguridad:** el endpoint exige un Firebase ID token de un UID administrador. El token de GitHub nunca se expone al navegador.
-- **Despliegue automático:** para que una carga realizada desde producción llegue a Firebase Hosting sin intervención manual, configura una vez la integración oficial con GitHub usando `firebase init hosting:github`.
+### Configuración
 
-### Variables privadas del backend
+1. En Firebase Console, habilita **Storage** para el proyecto `mi-kiosco-c7313` y confirma que `storageBucket` esté presente en `web/js/config.js`.
+2. `web/index.html` ya carga el SDK compat de Storage 10.7.1:
 
-```env
-KIOSCO_MEDIA_MODE=
-KIOSCO_GITHUB_REPOSITORY=Stefannysj/mi-kiosco
-KIOSCO_GITHUB_BRANCH=main
-KIOSCO_GITHUB_TOKEN=TU_TOKEN_PRIVADO
+```html
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 ```
 
-El token recomendado es un fine-grained personal access token limitado únicamente al repositorio de Kiosco y al permiso **Contents: Read and write**.
+3. `web/js/firebase.js` inicializa el servicio con:
+
+```js
+window.storage = firebase.storage();
+```
+
+4. `firebase.json` referencia `storage.rules`. Las reglas publicadas permiten lectura pública de imágenes de productos, escritura a usuarios autenticados, archivos menores de 5 MB y contenido `image/*`. El formulario del administrador restringe además la selección a JPEG, PNG, WEBP y GIF.
+
+> Nota de seguridad: las reglas solicitadas para esta versión comprueban `request.auth != null`, pero no distinguen un rol administrativo mediante custom claims. Por tanto, técnicamente cualquier usuario autenticado por Firebase Auth que conozca la ruta podría intentar escribir. Si el proyecto incorpora usuarios finales autenticados, conviene endurecer estas reglas con un claim `admin` o una validación equivalente.
+
+### Flujo de carga en el administrador
+
+- Drag & drop o selección mediante el explorador de archivos.
+- Validación cliente: JPEG, PNG, WEBP o GIF y máximo 5 MB.
+- Vista previa inmediata con `FileReader`.
+- Progreso real basado en `bytesTransferred / totalBytes`.
+- Ruta de Storage: `products/{productId}/{timestamp}.{ext}`.
+- Al finalizar, `getDownloadURL()` se guarda en `products/{id}.imageUrl`.
+- Al reemplazar o eliminar una imagen gestionada por Storage, se intenta limpiar el archivo anterior sin bloquear la operación si el objeto ya no existe.
+- El enlace **¿Prefieres usar una URL?** mantiene soporte para URLs HTTP/HTTPS externas.
+
+La actualización de un producto sube primero la nueva imagen y confirma la escritura en Firestore antes de eliminar la imagen anterior. Este orden evita dejar el producto apuntando a una imagen inexistente si una subida falla.
+
+### Importación Excel (Mejora 25)
+
+La importación conserva el valor de `imageUrl` tal como llega cuando es una URL pública HTTP/HTTPS. No descarga ni re-sube imágenes externas a Firebase Storage. La plantilla incluye una hoja **INSTRUCCIONES** y una nota en la cabecera `imageUrl` indicando este comportamiento.
+
+### Tienda pública
+
+`web/js/store.js` acepta tanto `imageUrl` externas como las `downloadURL` generadas por Firebase Storage. Los productos históricos que usen `imagePath` también se resuelven mediante Storage cuando corresponda.
+
+### Validación
+
+```bash
+for file in web/js/*.js; do node --check "$file" || exit 1; done
+```
+
+### Deploy
+
+Publica primero las reglas de Storage y después Hosting:
+
+```bash
+firebase deploy --only storage
+firebase deploy --only hosting
+```
+
+Si también cambiaste reglas de Firestore:
+
+```bash
+firebase deploy --only firestore:rules,storage,hosting
+```
