@@ -1,13 +1,35 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function hasPhone() {
+      return request.auth != null && request.auth.token.phone_number != null;
+    }
+
+    function isAdmin() {
+      return hasPhone()
+        && request.auth.token.phone_number in firestore.get(/databases/(default)/documents/config/admin).data.phones;
+    }
+
+    function isStaff() {
+      return hasPhone()
+        && request.auth.token.phone_number in firestore.get(/databases/(default)/documents/config/staff).data.phones;
+    }
+
+    function isAdminOrStaff() {
+      return isAdmin() || isStaff();
+    }
+
     match /products/{productId}/{fileName} {
       allow read: if true;
-      allow create, update: if request.auth != null
+      allow create, update: if isAdminOrStaff()
         && request.resource.size > 0
-        && request.resource.size <= 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/(jpeg|jpg|png|webp|gif)');
-      allow delete: if request.auth != null;
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdminOrStaff();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

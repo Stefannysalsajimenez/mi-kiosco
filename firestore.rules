@@ -27,37 +27,47 @@ service cloud.firestore {
       return isAdmin() || isStaff();
     }
 
-    function isStockOnlyDecrease() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt', 'active'])
+    function isSensitiveConfig(docId) {
+      return docId in ['admin', 'staff', 'media'];
+    }
+
+    function isStockDecreaseLinkedToOrder() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'lastOrderId', 'updatedAt'])
         && resource.data.stock is int
         && request.resource.data.stock is int
         && request.resource.data.stock >= 0
         && request.resource.data.stock < resource.data.stock
-        && (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['active'])
-          || (request.resource.data.stock == 0 && request.resource.data.active == false)
-        );
+        && request.resource.data.lastOrderId is string
+        && request.resource.data.lastOrderId.size() > 5
+        && request.resource.data.lastOrderId.size() <= 128
+        && existsAfter(/databases/$(database)/documents/orders/$(request.resource.data.lastOrderId))
+        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.lastOrderId)).data.status == 'pending';
     }
 
     function isValidOrder() {
       return request.resource.data.customer is string
         && request.resource.data.customer.size() > 0
+        && request.resource.data.customer.size() <= 120
         && request.resource.data.items is list
         && request.resource.data.items.size() > 0
+        && request.resource.data.items.size() <= 100
         && request.resource.data.total is number
         && request.resource.data.total >= 0
+        && request.resource.data.total <= 10000000
         && request.resource.data.status == 'pending';
     }
 
     match /config/{docId} {
-      allow read: if true;
-      allow write: if isAdminOrStaff();
+      allow read: if !isSensitiveConfig(docId) || isAdminOrStaff();
+      allow create, update: if (isSensitiveConfig(docId) && isAdmin())
+        || (!isSensitiveConfig(docId) && isAdminOrStaff());
+      allow delete: if isAdmin();
     }
 
     match /products/{productId} {
       allow read: if true;
       allow create, delete: if isAdminOrStaff();
-      allow update: if isAdminOrStaff() || isStockOnlyDecrease();
+      allow update: if isAdminOrStaff() || isStockDecreaseLinkedToOrder();
     }
 
     match /categories/{categoryId} {
@@ -67,6 +77,8 @@ service cloud.firestore {
 
     match /orders/{orderId} {
       allow create: if isValidOrder();
+      // Se mantiene lectura pública por compatibilidad con el historial de clientes actual.
+      // No guardar secretos, tokens ni credenciales dentro del documento del pedido.
       allow read: if true;
       allow update, delete: if isAdminOrStaff();
     }
@@ -76,16 +88,62 @@ service cloud.firestore {
     }
 
     match /blocked_clients/{clientId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      // El checkout solo hace get() por ID hash/legado. No se permite listar públicamente.
+      allow get: if true;
+      allow list, create, update, delete: if isAdminOrStaff();
     }
 
+    match /media/{mediaId} {
+      allow read: if isAdminOrStaff();
+      allow create, update: if isAdminOrStaff()
+        && request.resource.data.keys().hasOnly([
+          'data', 'contentType', 'width', 'height', 'bytes',
+          'originalName', 'originalType', 'originalBytes',
+          'kind', 'ownerId', 'createdAt', 'updatedAt', 'uploadedBy'
+        ])
+        && request.resource.data.data is string
+        && request.resource.data.data.matches('data:image/.*')
+        && request.resource.data.data.size() > 100
+        && request.resource.data.data.size() <= 240000
+        && request.resource.data.contentType is string
+        && request.resource.data.contentType.matches('image/.*')
+        && request.resource.data.width is int
+        && request.resource.data.width > 0
+        && request.resource.data.width <= 1600
+        && request.resource.data.height is int
+        && request.resource.data.height > 0
+        && request.resource.data.height <= 1600
+        && request.resource.data.bytes is int
+        && request.resource.data.bytes > 0
+        && request.resource.data.bytes <= 200000
+        && request.resource.data.kind in ['product', 'logo']
+        && request.resource.data.ownerId is string
+        && request.resource.data.ownerId.size() <= 128;
+      allow delete: if isAdminOrStaff();
+    }
+
+
     match /session_log/{sessionId} {
-      allow write: if request.auth != null;
-      allow read: if request.auth != null;
+      allow create: if isAuthenticated()
+        && request.auth.token.phone_number != null
+        && request.resource.data.keys().hasOnly([
+          'phone', 'loginAt', 'userAgent', 'platform', 'language', 'screenResolution'
+        ])
+        && request.resource.data.phone == request.auth.token.phone_number
+        && request.resource.data.userAgent is string
+        && request.resource.data.userAgent.size() <= 1024
+        && request.resource.data.platform is string
+        && request.resource.data.platform.size() <= 160
+        && request.resource.data.language is string
+        && request.resource.data.language.size() <= 32
+        && request.resource.data.screenResolution is string
+        && request.resource.data.screenResolution.size() <= 64;
+      allow read: if isAdminOrStaff();
+      allow update, delete: if false;
     }
 
     match /chats/{chatId} {
+      // Compatibilidad con el chat público actual. No usar esta colección para secretos.
       allow read, write: if true;
       match /messages/{messageId} {
         allow read, write: if true;
@@ -126,6 +184,10 @@ service cloud.firestore {
         && request.resource.data.encodedLength <= 420000;
 
       allow read, update, delete: if isAdminOrStaff();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

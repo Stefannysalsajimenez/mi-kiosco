@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = 'kiosco-repository-media-120';
+const APP_VERSION = 'kiosco-cache-20260818-firestore-images-fix';
 const CACHE_PREFIX = 'kiosco';
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${APP_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-${APP_VERSION}`;
@@ -26,7 +26,6 @@ const APP_SHELL = [
   '/icons/icon-512.png',
   '/css/kiosco-receipts-appearance.css',
   '/js/kiosco-upgrade-config.js',
-  '/js/kiosco-media.js',
   '/js/kiosco-receipts-appearance.js',
   '/css/kiosco-final-improvements.css',
   '/js/kiosco-final-improvements.js',
@@ -36,7 +35,10 @@ const APP_SHELL = [
   '/css/kiosco-responsive-media-v10.css',
   '/js/kiosco-product-experience.js',
   '/js/kiosco-admin-operations.js',
-  '/js/kiosco-dashboard-heatmap.js'
+  '/js/kiosco-dashboard-heatmap.js',
+  '/css/kiosco-system.css',
+  '/js/kiosco-system.js',
+  '/js/kiosco-firestore-images.js'
 ];
 
 const NETWORK_ONLY_HOSTS = [
@@ -81,22 +83,15 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('message', event => {
-  if (event.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-
-  if (event.data?.type === 'CLEAR_APP_CACHE') {
-    event.waitUntil(clearAppCaches());
-  }
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'CLEAR_APP_CACHE') event.waitUntil(clearAppCaches());
 });
 
 self.addEventListener('fetch', event => {
   const request = event.request;
-
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-
   if (!['http:', 'https:'].includes(url.protocol)) return;
 
   if (NETWORK_ONLY_HOSTS.includes(url.hostname)) {
@@ -114,15 +109,18 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (request.destination === 'image' || /\.(?:png|jpe?g|svg|gif|webp|ico|avif)$/i.test(url.pathname)) {
+  if (
+    request.destination === 'image'
+    || /\.(?:png|jpe?g|jpe|svg|gif|webp|ico|avif|bmp|tiff?|heic|heif|jxl)$/i.test(url.pathname)
+  ) {
     event.respondWith(cacheFirst(request, IMAGE_CACHE));
     return;
   }
 
   if (
-    request.destination === 'script' ||
-    request.destination === 'style' ||
-    /\.(?:js|css|json|webmanifest)$/i.test(url.pathname)
+    request.destination === 'script'
+    || request.destination === 'style'
+    || /\.(?:js|css|json|webmanifest)$/i.test(url.pathname)
   ) {
     event.respondWith(networkFirst(request, RUNTIME_CACHE, 4500));
     return;
@@ -135,27 +133,22 @@ self.addEventListener('fetch', event => {
 
 async function handleNavigation(event) {
   const request = event.request;
-
   try {
     const preloadResponse = await event.preloadResponse;
     if (preloadResponse) {
       await putInCache(RUNTIME_CACHE, request, preloadResponse.clone());
       return preloadResponse;
     }
-
     const response = await fetchWithTimeout(request, 6000);
     await putInCache(RUNTIME_CACHE, request, response.clone());
     return response;
-  } catch {
+  } catch (error) {
     const cachedPage = await caches.match(request, { ignoreSearch: true });
     if (cachedPage) return cachedPage;
-
     const appShell = await caches.match('/index.html');
     if (appShell) return appShell;
-
     const offlinePage = await caches.match('/offline.html');
     if (offlinePage) return offlinePage;
-
     return new Response('Sin conexión', {
       status: 503,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' }
@@ -166,7 +159,7 @@ async function handleNavigation(event) {
 async function networkOnly(request) {
   try {
     return await fetch(request);
-  } catch {
+  } catch (error) {
     return new Response(JSON.stringify({ error: 'offline' }), {
       status: 503,
       headers: { 'Content-Type': 'application/json; charset=utf-8' }
@@ -179,10 +172,9 @@ async function networkFirst(request, cacheName, timeoutMs) {
     const response = await fetchWithTimeout(request, timeoutMs);
     await putInCache(cacheName, request, response.clone());
     return response;
-  } catch {
+  } catch (error) {
     const cached = await caches.match(request, { ignoreSearch: false });
     if (cached) return cached;
-
     return new Response('', { status: 504, statusText: 'Gateway Timeout' });
   }
 }
@@ -190,12 +182,11 @@ async function networkFirst(request, cacheName, timeoutMs) {
 async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request, { ignoreSearch: false });
   if (cached) return cached;
-
   try {
     const response = await fetch(request);
     await putInCache(cacheName, request, response.clone());
     return response;
-  } catch {
+  } catch (error) {
     return new Response('', { status: 503, statusText: 'Service Unavailable' });
   }
 }
@@ -203,12 +194,9 @@ async function cacheFirst(request, cacheName) {
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
-
   const networkPromise = fetch(request)
     .then(async response => {
-      if (isCacheable(response)) {
-        await cache.put(request, response.clone());
-      }
+      if (isCacheable(response)) await cache.put(request, response.clone());
       return response;
     })
     .catch(() => null);
@@ -220,19 +208,14 @@ async function staleWhileRevalidate(request, cacheName) {
 
   const networkResponse = await networkPromise;
   if (networkResponse) return networkResponse;
-
   return new Response('', { status: 503, statusText: 'Service Unavailable' });
 }
 
 async function fetchWithTimeout(request, timeoutMs) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    return await fetch(request, {
-      cache: 'no-store',
-      signal: controller.signal
-    });
+    return await fetch(request, { cache: 'no-store', signal: controller.signal });
   } finally {
     clearTimeout(timeoutId);
   }
@@ -240,7 +223,6 @@ async function fetchWithTimeout(request, timeoutMs) {
 
 async function putInCache(cacheName, request, response) {
   if (!isCacheable(response)) return;
-
   const cache = await caches.open(cacheName);
   await cache.put(request, response);
 }
