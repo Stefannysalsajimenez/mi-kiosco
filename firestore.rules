@@ -5,12 +5,26 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasPhone() {
+      return request.auth != null && request.auth.token.phone_number != null;
+    }
+
     function isAdmin() {
-      return request.auth != null
-        && request.auth.token.phone_number != null
+      return hasPhone()
         && exists(/databases/$(database)/documents/config/admin)
         && get(/databases/$(database)/documents/config/admin).data.phones is list
         && request.auth.token.phone_number in get(/databases/$(database)/documents/config/admin).data.phones;
+    }
+
+    function isStaff() {
+      return hasPhone()
+        && exists(/databases/$(database)/documents/config/staff)
+        && get(/databases/$(database)/documents/config/staff).data.phones is list
+        && request.auth.token.phone_number in get(/databases/$(database)/documents/config/staff).data.phones;
+    }
+
+    function isAdminOrStaff() {
+      return isAdmin() || isStaff();
     }
 
     function isStockOnlyDecrease() {
@@ -36,57 +50,59 @@ service cloud.firestore {
     }
 
     match /config/{docId} {
-      // Lectura pública usada por tienda, Expo y validación del teléfono admin.
       allow read: if true;
-      // Apariencia, pagos, FCM y datos de recibo: solo administrador.
-      allow write: if isAdmin();
+      allow write: if isAdminOrStaff();
     }
 
     match /products/{productId} {
       allow read: if true;
-      allow create, delete: if isAuthenticated();
-      allow update: if isAuthenticated() || isStockOnlyDecrease();
+      allow create, delete: if isAdminOrStaff();
+      allow update: if isAdminOrStaff() || isStockOnlyDecrease();
     }
 
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdminOrStaff();
     }
 
     match /orders/{orderId} {
       allow create: if isValidOrder();
       allow read: if true;
-      allow update, delete: if isAuthenticated();
+      allow update, delete: if isAdminOrStaff();
     }
 
-    // KIOSCO_NINE:EXPENSES_RULES
     match /expenses/{expenseId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAdminOrStaff();
+    }
+
+    match /blocked_clients/{clientId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    match /session_log/{sessionId} {
+      allow write: if request.auth != null;
+      allow read: if request.auth != null;
     }
 
     match /chats/{chatId} {
       allow read, write: if true;
-
       match /messages/{messageId} {
         allow read, write: if true;
       }
     }
 
     match /audit_log/{auditId} {
-      // El historial es de solo lectura después de crearse.
-      allow create, read: if isAdmin();
+      allow create, read: if isAdminOrStaff();
       allow update, delete: if false;
     }
 
-    // KIOSCO_FINAL:PAYMENT_PROOFS
     match /paymentProofs/{orderId} {
       function linkedOrder() {
         return get(/databases/$(database)/documents/orders/$(orderId)).data;
       }
 
-      // El cliente público solo puede crear una imagen comprimida para un pedido
-      // que acaba de registrar y que declaró esperar un comprobante.
-      allow create: if (isAdmin() || (
+      allow create: if (isAdminOrStaff() || (
           request.auth == null
           && exists(/databases/$(database)/documents/orders/$(orderId))
           && linkedOrder().paymentProofExpected == true
@@ -108,8 +124,8 @@ service cloud.firestore {
         && request.resource.data.encodedLength is int
         && request.resource.data.encodedLength > 100
         && request.resource.data.encodedLength <= 420000;
-      allow read, update, delete: if isAdmin();
-    }
 
+      allow read, update, delete: if isAdminOrStaff();
+    }
   }
 }

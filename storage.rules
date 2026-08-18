@@ -3,9 +3,10 @@ service firebase.storage {
   match /b/{bucket}/o {
     match /products/{productId}/{fileName} {
       allow read: if true;
-      allow write: if request.auth != null
-        && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+      allow create, update: if request.auth != null
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|jpg|png|webp|gif)');
       allow delete: if request.auth != null;
     }
   }
