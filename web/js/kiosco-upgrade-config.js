@@ -6,7 +6,7 @@ window.KIOSCO_UPGRADE_CONFIG = Object.freeze({
   firebaseVapidKey: '',
   enableCallMeBot: false,
   storeUrl: 'https://mi-kiosco-c7313.web.app',
-  imageStorage: 'firestore'
+  imageStorage: 'product-inline-base64'
 });
 
 (() => {
@@ -85,7 +85,7 @@ window.KIOSCO_UPGRADE_CONFIG = Object.freeze({
     window.__KIOSCO_FIRESTORE_IMAGES_LOADING = true;
     const script = document.createElement('script');
     script.dataset.kioscoFirestoreImages = 'true';
-    script.src = 'js/kiosco-firestore-images.js?build=20260818-firestore-images-fix';
+    script.src = 'js/kiosco-firestore-images.js?build=20260818-product-base64';
     script.async = false;
     script.addEventListener('error', () => {
       window.__KIOSCO_FIRESTORE_IMAGES_LOADING = false;

@@ -693,6 +693,7 @@
   function applyCatalogEnhancements() {
     const grid = document.getElementById('productsGrid');
     if (!grid) return;
+    patchInlineProductImages();
     setViewMode(state.viewMode, false);
     const productMap = getProductMap();
     const columns = [...grid.children].filter(child => child.querySelector?.('.prod-card[data-product-id]'));
@@ -746,6 +747,7 @@
     }
     const safeProducts = list.map(product => {
       const copy = { ...product };
+      if (Array.isArray(copy.images)) copy.images = [];
       if (typeof copy.imageUrl === 'string' && copy.imageUrl.startsWith('data:image/')) copy.imageUrl = null;
       if (typeof copy.resolvedImageUrl === 'string' && copy.resolvedImageUrl.startsWith('data:image/')) copy.resolvedImageUrl = null;
       if (typeof copy.imageOriginalUrl === 'string' && copy.imageOriginalUrl.startsWith('data:image/')) copy.imageOriginalUrl = null;
@@ -775,13 +777,17 @@
       renderFeatured();
       renderOffer();
       syncVariantCartWithProducts();
+      window.setTimeout(patchInlineProductImages, 30);
     });
     window.addEventListener('store:categories-updated', event => {
       state.categories = Array.isArray(event.detail?.categories) ? event.detail.categories : (window.Store?.getCategories?.() || []);
       cacheStoreData('categories', state.categories);
     });
     window.addEventListener('store:filter-changed', scheduleCatalogApply);
-    window.addEventListener('cart:updated', scheduleCatalogApply);
+    window.addEventListener('cart:updated', () => {
+      scheduleCatalogApply();
+      window.setTimeout(patchInlineProductImages, 30);
+    });
   }
 
   function ensureOfflineBanner() {
@@ -818,7 +824,7 @@
     if (!grid) return;
     const products = state.products.filter(product => product.active !== false && (!state.cacheCategoryId || product.categoryId === state.cacheCategoryId || product.subcategoryId === state.cacheCategoryId));
     grid.innerHTML = products.map(product => {
-      const image = product.resolvedImageUrl || product.imageUrl || '';
+      const image = getProductDisplayImage(product);
       const stock = product.stock == null ? null : Number(product.stock);
       return `<div class="col"><article class="card h-100 prod-card" data-product-id="${esc(product.id)}">
         <div class="prod-img-wrap position-relative">${image ? `<img src="${esc(image)}" alt="${esc(product.name)}" class="card-img-top prod-img" loading="lazy">` : '<div class="prod-img-placeholder d-flex align-items-center justify-content-center h-100"><i class="bi bi-bag display-4 text-muted"></i></div>'}</div>
@@ -1056,7 +1062,7 @@
       section.innerHTML = '';
       return;
     }
-    const image = product.resolvedImageUrl || product.imageUrl || '';
+    const image = getProductDisplayImage(product);
     section.innerHTML = `<div class="kk-featured-image">${image ? `<img src="${esc(image)}" alt="${esc(product.name)}">` : '<i class="bi bi-bag display-2 text-muted"></i>'}</div><div class="kk-featured-body"><span class="badge text-bg-warning kk-featured-badge mb-2">OFERTA DEL DÍA</span><h2 class="h4 mb-2">${esc(product.name)}</h2>${product.description ? `<p class="text-muted">${esc(product.description)}</p>` : ''}<div class="h5 text-primary fw-bold mb-2">${money(product.price)}</div>${config.message ? `<p class="mb-3 fw-semibold">${esc(config.message)}</p>` : ''}<button type="button" class="btn btn-primary align-self-start" id="kkFeaturedAdd"><i class="bi bi-cart-plus me-2"></i>Agregar al carrito</button></div>`;
     section.querySelector('#kkFeaturedAdd')?.addEventListener('click', () => handleProductAdd(product));
     section.classList.remove('d-none');
@@ -1350,12 +1356,94 @@
     return `${(number / (1024 * 1024)).toFixed(2)} MB`;
   }
 
+  function getInlineProductImages(product) {
+    if (!product) return [];
+    const source = Array.isArray(product.images) ? product.images : [];
+    const images = source.filter(value => typeof value === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(value));
+    const legacy = String(product.imageUrl || product.resolvedImageUrl || '').trim();
+    if (!images.length && /^data:image\/[a-z0-9.+-]+;base64,/i.test(legacy)) images.push(legacy);
+    return images.slice(0, 3);
+  }
+
+  function getProductDisplayImage(product) {
+    return getInlineProductImages(product)[0]
+      || String(product?.resolvedImageUrl || product?.imageUrl || '').trim();
+  }
+
+  function patchInlineProductImages() {
+    const publicProducts = Array.isArray(state.products) ? state.products : [];
+    const publicMap = new Map(publicProducts.map(product => [String(product.id), product]));
+
+    document.querySelectorAll('#productsGrid .prod-card[data-product-id]').forEach(card => {
+      const product = publicMap.get(String(card.dataset.productId || ''));
+      const source = getProductDisplayImage(product);
+      if (!source) return;
+      const wrap = card.querySelector('.prod-img-wrap');
+      if (!wrap) return;
+      let image = wrap.querySelector('img.prod-img');
+      if (!image) {
+        wrap.querySelector('.prod-img-placeholder')?.remove();
+        image = document.createElement('img');
+        image.className = 'card-img-top prod-img';
+        image.loading = 'lazy';
+        image.decoding = 'async';
+        wrap.prepend(image);
+      }
+      if (image.src !== source) image.src = source;
+      image.alt = String(product?.name || 'Producto');
+    });
+
+    const adminProducts = window.Admin?.getProducts?.() || [];
+    const adminMap = new Map(adminProducts.map(product => [String(product.id), product]));
+    document.querySelectorAll('#adminProductsGrid [data-admin-product-id]').forEach(card => {
+      const product = adminMap.get(String(card.dataset.adminProductId || ''));
+      const source = getProductDisplayImage(product);
+      if (!source) return;
+      const wrap = card.querySelector('.card-img-wrap');
+      if (!wrap) return;
+      let image = wrap.querySelector('img');
+      if (!image) {
+        wrap.replaceChildren();
+        image = document.createElement('img');
+        image.className = 'card-img-top h-100 w-100';
+        image.style.objectFit = 'cover';
+        wrap.append(image);
+      }
+      if (image.src !== source) image.src = source;
+      image.alt = String(product?.name || 'Producto');
+    });
+
+    ['cartItemsList', 'cartItemsListMobile'].forEach(id => {
+      const root = document.getElementById(id);
+      if (!root) return;
+      root.querySelectorAll('.cart-item[data-product-id]').forEach(row => {
+        const product = publicMap.get(String(row.dataset.productId || ''));
+        const source = getProductDisplayImage(product);
+        if (!source) return;
+        let image = row.querySelector('img.cart-item-img');
+        if (!image) {
+          row.querySelector('.cart-item-img-ph')?.remove();
+          image = document.createElement('img');
+          image.className = 'cart-item-img';
+          image.width = 52;
+          image.height = 52;
+          image.loading = 'lazy';
+          row.prepend(image);
+        }
+        if (image.src !== source) image.src = source;
+        image.alt = String(product?.name || 'Producto');
+      });
+    });
+  }
+
   function ensureImageProductEnhancements() {
     const url = document.getElementById('productImageUrl');
     const file = document.getElementById('productImageFile');
     if (!url || !file) return;
     url.placeholder = 'https://';
-    file.accept = 'image/*,.jpg,.jpeg,.jpe,.png,.webp,.gif,.svg,.avif,.bmp,.heic,.heif,.tif,.tiff,.ico,.jxl,.psd,.ai,.eps,.ept,.eps3,.jp2,.wdp,.jxr,.hdp,.tga,.flif,.indd,.pdf';
+    file.accept = 'image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp,image/svg+xml,.jpg,.jpeg,.png,.webp,.gif,.avif,.bmp,.svg';
+    const fileHelp = file.parentElement?.querySelector('.form-text');
+    if (fileHelp) fileHelp.textContent = 'La imagen se redimensiona y comprime con canvas y se guarda como Base64 dentro del documento del producto en Firestore. Máximo original: 5 MB.';
     if (!document.getElementById('kkProductImageUrlHelp')) {
       const help = document.createElement('div');
       help.id = 'kkProductImageUrlHelp';
@@ -1502,7 +1590,7 @@
     image.onerror = () => {
       updateImageMeta(0, 0, file.size, false);
       const meta = document.getElementById('kkImageMeta');
-      if (meta) meta.textContent = `${humanBytes(file.size)} · vista previa no disponible; el servicio intentará convertir el formato al subirlo`;
+      if (meta) meta.textContent = `${humanBytes(file.size)} · vista previa no disponible; el navegador intentará convertir el formato al guardar`;
     };
     image.src = state.imagePreviewUrl;
     setSharedPreview(state.imagePreviewUrl);
@@ -1555,7 +1643,7 @@
     state.removeProductImageRequested = false;
     setImageError(false);
     const urlField = document.getElementById('productImageUrl');
-    const storedImage = String(product?.resolvedImageUrl || product?.imageUrl || '').trim();
+    const storedImage = getProductDisplayImage(product);
     if (storedImage.startsWith('data:image/')) {
       if (urlField) urlField.value = '';
       setSharedPreview(storedImage);
@@ -1568,8 +1656,8 @@
   }
 
   const FIRESTORE_MEDIA_COLLECTION = 'media';
-  const FIRESTORE_MEDIA_TARGET_CHARS = 180000;
-  const FIRESTORE_MEDIA_HARD_CHARS = 240000;
+  const FIRESTORE_MEDIA_TARGET_CHARS = 150000;
+  const FIRESTORE_MEDIA_HARD_CHARS = 210000;
 
   function dataUrlApproxBytes(dataUrl) {
     const value = String(dataUrl || '');
@@ -1598,7 +1686,7 @@
     const image = loaded.image;
     const originalWidth = Math.max(1, image.naturalWidth || image.width || 1);
     const originalHeight = Math.max(1, image.naturalHeight || image.height || 1);
-    const maxSide = kind === 'logo' ? 800 : 1200;
+    const maxSide = kind === 'logo' ? 800 : 1000;
     const scale = Math.min(1, maxSide / Math.max(originalWidth, originalHeight));
     let width = Math.max(1, Math.round(originalWidth * scale));
     let height = Math.max(1, Math.round(originalHeight * scale));
@@ -1645,7 +1733,8 @@
     };
   }
 
-  async function uploadFirestoreImage(file, kind = 'product', ownerId = '') {
+  async function uploadFirestoreImage(file, kind = 'logo', ownerId = '') {
+    if (kind === 'product') throw new Error('Las imágenes de productos se guardan directamente dentro del documento del producto.');
     if (!window.db || !window.firebase?.firestore) throw new Error('Firestore no está disponible.');
     if (!window.auth?.currentUser) throw new Error('Debes iniciar sesión como administrador para subir imágenes.');
     const optimized = await optimizeImageForFirestore(file, kind);
@@ -1706,10 +1795,6 @@
     // Las imágenes antiguas de otros proveedores se conservan por compatibilidad.
   }
 
-  async function uploadProductImageFreeApi(productId, file) {
-    return uploadFirestoreImage(file, 'product', productId);
-  }
-
   async function saveProductEnhanced(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -1728,14 +1813,25 @@
     if (stockRaw !== '' && (!Number.isInteger(Number(stockRaw)) || Number(stockRaw) < 0)) return notify('Stock inválido', 'danger');
     if (!Number.isFinite(discount) || discount < 0 || discount > 100) return notify('El descuento debe estar entre 0 y 100', 'danger');
     if (enteredImageUrl && document.getElementById('kkImageError')?.classList.contains('show')) return notify('No se pudo cargar la imagen. Verifica el URL.', 'danger');
+
     let variants;
     try {
       variants = readVariantRows();
     } catch (error) {
       return notify(error.message, 'danger');
     }
+
     const products = window.Admin?.getProducts?.() || [];
-    const existing = products.find(product => String(product.id) === String(id));
+    let existing = products.find(product => String(product.id) === String(id)) || null;
+    if (id && window.db) {
+      try {
+        const snapshot = await db.collection(COLL.products).doc(id).get();
+        if (snapshot.exists) existing = { id: snapshot.id, ...snapshot.data() };
+      } catch (error) {
+        console.warn('No se pudo refrescar el producto antes de guardar:', error?.message || error);
+      }
+    }
+
     const reference = id ? db.collection(COLL.products).doc(id) : db.collection(COLL.products).doc();
     const button = event.submitter || event.target.querySelector('[type="submit"]');
     const oldHtml = button?.innerHTML;
@@ -1743,7 +1839,7 @@
       button.disabled = true;
       button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando';
     }
-    let uploadedPath = null;
+
     try {
       const data = {
         name,
@@ -1759,7 +1855,12 @@
         variants,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
+
+      const oldMediaPath = String(existing?.imagePath || '');
+      const existingInlineImages = getInlineProductImages(existing);
+
       if (state.removeProductImageRequested) {
+        data.images = [];
         data.imagePath = null;
         data.imageUrl = null;
         data.imageOriginalUrl = null;
@@ -1769,33 +1870,38 @@
         data.imageHeight = null;
         data.imageBytes = null;
       } else if (state.selectedProductFile) {
-        const uploaded = await uploadProductImageFreeApi(reference.id, state.selectedProductFile);
-        data.imagePath = uploaded.imagePath;
-        data.imageUrl = uploaded.imageUrl;
+        const optimized = await optimizeImageForFirestore(state.selectedProductFile, 'product');
+        data.images = [optimized.dataUrl];
+        data.imagePath = null;
+        data.imageUrl = null;
         data.imageOriginalUrl = null;
-        data.imageProvider = 'firestore';
-        data.imageMediaId = uploaded.mediaId;
-        data.imageWidth = uploaded.width;
-        data.imageHeight = uploaded.height;
-        data.imageBytes = uploaded.bytes;
-        uploadedPath = uploaded.imagePath;
-      } else if (existing && enteredImageUrl && enteredImageUrl === String(existing.imageUrl || existing.resolvedImageUrl || '').trim()) {
-        data.imagePath = existing.imagePath || null;
-        data.imageUrl = existing.imageUrl || existing.resolvedImageUrl || enteredImageUrl;
-        data.imageOriginalUrl = existing.imageOriginalUrl || null;
-        data.imageProvider = existing.imageProvider || (String(existing.imagePath || '').startsWith('firestore-media:') ? 'firestore' : null);
-        data.imageMediaId = existing.imageMediaId || firestoreMediaIdFromPath(existing.imagePath);
+        data.imageProvider = 'firestore-inline-base64';
+        data.imageMediaId = null;
+        data.imageWidth = optimized.width;
+        data.imageHeight = optimized.height;
+        data.imageBytes = optimized.bytes;
       } else if (enteredImageUrl) {
+        data.images = [];
         data.imagePath = null;
         data.imageUrl = enteredImageUrl;
         data.imageOriginalUrl = null;
         data.imageProvider = 'external';
-        data.imagePath = null;
         data.imageMediaId = null;
         data.imageWidth = null;
         data.imageHeight = null;
         data.imageBytes = null;
+      } else if (existingInlineImages.length) {
+        data.images = existingInlineImages;
+        data.imagePath = null;
+        data.imageUrl = null;
+        data.imageOriginalUrl = null;
+        data.imageProvider = 'firestore-inline-base64';
+        data.imageMediaId = null;
+        data.imageWidth = existing?.imageWidth || null;
+        data.imageHeight = existing?.imageHeight || null;
+        data.imageBytes = existing?.imageBytes || dataUrlApproxBytes(existingInlineImages[0]);
       } else if (existing) {
+        data.images = [];
         data.imagePath = existing.imagePath || null;
         data.imageUrl = existing.imageUrl || null;
         data.imageOriginalUrl = existing.imageOriginalUrl || null;
@@ -1805,6 +1911,7 @@
         data.imageHeight = existing.imageHeight || null;
         data.imageBytes = existing.imageBytes || null;
       } else {
+        data.images = [];
         data.imagePath = null;
         data.imageUrl = null;
         data.imageOriginalUrl = null;
@@ -1814,27 +1921,38 @@
         data.imageHeight = null;
         data.imageBytes = null;
       }
-      if (id) await reference.update(data);
-      else {
+
+      const estimate = new Blob([JSON.stringify({ ...data, updatedAt: null, createdAt: null })]).size;
+      if (estimate > 850000) {
+        throw new Error('El producto queda demasiado grande para Firestore. Usa una imagen más pequeña.');
+      }
+
+      if (id) {
+        await reference.update(data);
+      } else {
         data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
         await reference.set(data);
       }
-      if (existing && (existing.imagePath || existing.imageUrl) && (existing.imagePath !== data.imagePath || existing.imageUrl !== data.imageUrl)) {
-        await detachMediaAsset(existing.imagePath, existing.imageUrl, 'product', reference.id, { removeWhenUnused: true });
+
+      // Limpieza de una imagen antigua creada por los parches anteriores en /media.
+      // Las nuevas imágenes de producto ya no crean documentos en esa colección.
+      if (oldMediaPath.startsWith('firestore-media:') && data.imagePath !== oldMediaPath) {
+        await deleteFirestoreMediaByPath(oldMediaPath);
       }
-      if (existing?.imagePath && existing.imagePath !== data.imagePath && existing.imageProvider === 'firebase-storage' && window.storage) {
-        storage.ref(existing.imagePath).delete().catch(() => {});
+      if (oldMediaPath && !oldMediaPath.startsWith('firestore-media:') && data.imagePath !== oldMediaPath && existing?.imageProvider === 'firebase-storage' && window.storage) {
+        storage.ref(oldMediaPath).delete().catch(() => {});
       }
+
       notify(id ? 'Producto actualizado' : 'Producto creado', 'success');
       bootstrap.Modal.getInstance(document.getElementById('productModal'))?.hide();
       state.selectedProductFile = null;
-        state.removeProductImageRequested = false;
+      state.removeProductImageRequested = false;
       if (state.imagePreviewUrl) {
         URL.revokeObjectURL(state.imagePreviewUrl);
         state.imagePreviewUrl = null;
       }
+      window.setTimeout(patchInlineProductImages, 80);
     } catch (error) {
-      if (uploadedPath?.startsWith('firestore-media:')) await deleteFirestoreMediaByPath(uploadedPath);
       notify(`No se pudo guardar el producto: ${error.message}`, 'danger');
     } finally {
       if (button) {
@@ -1848,7 +1966,7 @@
     ensureImageProductEnhancements();
     if (!window.__kkFirestoreProductGuardsBound) {
       // Window capture runs before legacy document/form handlers. This prevents old
-      // Cloudinary/mediaApi handlers from intercepting product image operations.
+      // Los manejadores antiguos de imágenes no deben interceptar el guardado Base64 del producto.
       window.addEventListener('input', event => {
         if (event.target?.id !== 'productImageUrl') return;
         event.stopImmediatePropagation();
@@ -2886,7 +3004,8 @@
       if (!window.confirm(`¿Eliminar "${existing.name || 'producto'}"?`)) return;
       try {
         await db.collection(COLL.products).doc(productId).delete();
-        if (existing.imagePath) await detachMediaAsset(existing.imagePath, existing.imageUrl || existing.resolvedImageUrl, 'product', productId, { removeWhenUnused: true });
+        if (String(existing.imagePath || '').startsWith('firestore-media:')) await deleteFirestoreMediaByPath(existing.imagePath);
+        else if (existing.imagePath && existing.imageProvider === 'firebase-storage' && window.storage) storage.ref(existing.imagePath).delete().catch(() => {});
         notify('Producto eliminado', 'info');
       } catch (error) {
         notify(`No se pudo eliminar el producto: ${error.message}`, 'danger');
@@ -2951,6 +3070,7 @@
     window.addEventListener('admin:products-updated', () => {
       refreshAdminProductSelects();
       applyPermissionsToAdmin();
+      window.setTimeout(patchInlineProductImages, 0);
     });
     document.querySelectorAll('[data-admin-section]').forEach(link => link.addEventListener('click', () => window.setTimeout(initAdminDynamicEnhancements, 30)));
     const observer = new MutationObserver(debounce(() => {
@@ -3032,7 +3152,7 @@
   }
 
   function init() {
-    console.info('[Kiosco] almacenamiento de imágenes: Firestore | 20260818-firestore-images-fix');
+    console.info('[Kiosco] imágenes de productos: Base64 inline en Firestore | 20260818-product-base64');
     hardenUrlPrivacy();
     initSplash();
     initLocalPreferences();
@@ -3065,8 +3185,8 @@
     // Este módulo solo amplía permisos después de que Auth.checkIsAdmin resuelve.
   }
 
-  window.KIOSCO_SYSTEM_STORAGE = 'firestore';
-  window.KIOSCO_SYSTEM_BUILD = '20260818-firestore-images-fix';
+  window.KIOSCO_SYSTEM_STORAGE = 'product-inline-base64';
+  window.KIOSCO_SYSTEM_BUILD = '20260818-product-base64';
   patchAuthAccess();
 
   window.KioscoSystem = Object.freeze({
@@ -3077,6 +3197,8 @@
     handleProductAdd,
     loadMediaConfig,
     uploadFirestoreImage,
+    optimizeImageForFirestore,
+    getProductDisplayImage,
     sanitizeUrlForPrivacy
   });
 
