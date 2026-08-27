@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = 'kiosco-cache-20260818-product-base64';
+const APP_VERSION = 'kiosco-cache-20260827-1272';
 const CACHE_PREFIX = 'kiosco';
 const STATIC_CACHE = `${CACHE_PREFIX}-static-${APP_VERSION}`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-${APP_VERSION}`;
@@ -24,21 +24,11 @@ const APP_SHELL = [
   '/icons/favicon.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  '/css/kiosco-receipts-appearance.css',
-  '/js/kiosco-upgrade-config.js',
-  '/js/kiosco-receipts-appearance.js',
-  '/css/kiosco-final-improvements.css',
-  '/js/kiosco-final-improvements.js',
-  '/css/kiosco-audit.css',
-  '/js/kiosco-audit.js',
-  '/css/kiosco-nine-improvements.css',
-  '/css/kiosco-responsive-media-v10.css',
-  '/js/kiosco-product-experience.js',
-  '/js/kiosco-admin-operations.js',
-  '/js/kiosco-dashboard-heatmap.js',
-  '/css/kiosco-system.css',
-  '/js/kiosco-system.js',
-  '/js/kiosco-firestore-images.js'
+  '/icons/creador.png',
+  '/docs/guia-caja.pdf',
+
+  '/css/features.css',
+  '/js/features.js',
 ];
 
 const NETWORK_ONLY_HOSTS = [
